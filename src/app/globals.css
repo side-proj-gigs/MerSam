@@ -1,0 +1,334 @@
+@import 'tailwindcss';
+
+/*
+  MerSam's identity is a gold gradient wordmark with a water droplet. The system
+  below takes that literally: warm metallic golds for anything that carries the
+  brand, a cool water blue for anything that carries meaning (links, focus,
+  active states), and a deep slate ground so the gold reads as metal rather than
+  as yellow.
+*/
+@theme {
+  --color-ink-950: #07090c;
+  --color-ink-900: #0b0e13;
+  --color-ink-850: #10141b;
+  --color-ink-800: #161b24;
+  --color-ink-700: #1f2632;
+  --color-ink-600: #2c3542;
+  --color-ink-500: #475163;
+  --color-ink-400: #6b7689;
+  --color-ink-300: #98a2b3;
+  --color-ink-200: #c7cedb;
+  --color-ink-100: #e4e8ef;
+  --color-ink-50: #f5f7fa;
+
+  --color-gold-50: #fdf9ef;
+  --color-gold-100: #f8eed4;
+  --color-gold-200: #f0dca8;
+  --color-gold-300: #e3c479;
+  --color-gold-400: #d6ad56;
+  --color-gold-500: #c9a227;
+  --color-gold-600: #ab8420;
+  --color-gold-700: #8a671c;
+  --color-gold-800: #6b4f1c;
+  --color-gold-900: #4d3917;
+
+  --color-aqua-50: #effbfc;
+  --color-aqua-100: #d6f4f7;
+  --color-aqua-200: #b0e8ef;
+  --color-aqua-300: #77d5e2;
+  --color-aqua-400: #38b9cd;
+  --color-aqua-500: #1e9cb3;
+  --color-aqua-600: #1a7e97;
+  --color-aqua-700: #1b667b;
+  --color-aqua-800: #1d5465;
+  --color-aqua-900: #1c4756;
+
+  --color-success: #2f9e63;
+  --color-warning: #d08b14;
+  --color-danger: #d1443b;
+
+  --font-display: var(--font-fraunces), 'Georgia', serif;
+  --font-sans: var(--font-jakarta), system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --radius-card: 1.25rem;
+
+  --shadow-lift: 0 1px 2px rgb(7 9 12 / 0.06), 0 12px 32px -12px rgb(7 9 12 / 0.18);
+  --shadow-float: 0 2px 4px rgb(7 9 12 / 0.08), 0 28px 60px -20px rgb(7 9 12 / 0.28);
+
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Semantic surface tokens. Everything in the UI reads from these, so dark mode
+   is a matter of redefining a dozen values rather than auditing every file. */
+:root {
+  color-scheme: light;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: var(--color-ink-50);
+  --surface-inverse: var(--color-ink-900);
+  --border-subtle: #e6eaf1;
+  --border-strong: #cfd6e2;
+  --text-primary: var(--color-ink-900);
+  --text-secondary: var(--color-ink-500);
+  --text-muted: var(--color-ink-400);
+  --text-inverse: #ffffff;
+  --brand: var(--color-gold-600);
+  --brand-contrast: var(--color-ink-950);
+  --accent: var(--color-aqua-600);
+  --ring: var(--color-aqua-500);
+}
+
+:root[data-theme='dark'],
+:root:not([data-theme='light']) {
+  @media (prefers-color-scheme: dark) {
+    color-scheme: dark;
+    --surface: var(--color-ink-900);
+    --surface-raised: var(--color-ink-850);
+    --surface-sunken: var(--color-ink-950);
+    --surface-inverse: var(--color-ink-50);
+    --border-subtle: #212936;
+    --border-strong: #303a4a;
+    --text-primary: var(--color-ink-50);
+    --text-secondary: var(--color-ink-300);
+    --text-muted: var(--color-ink-400);
+    --text-inverse: var(--color-ink-950);
+    --brand: var(--color-gold-400);
+    --brand-contrast: var(--color-ink-950);
+    --accent: var(--color-aqua-300);
+    --ring: var(--color-aqua-400);
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --surface: var(--color-ink-900);
+  --surface-raised: var(--color-ink-850);
+  --surface-sunken: var(--color-ink-950);
+  --surface-inverse: var(--color-ink-50);
+  --border-subtle: #212936;
+  --border-strong: #303a4a;
+  --text-primary: var(--color-ink-50);
+  --text-secondary: var(--color-ink-300);
+  --text-muted: var(--color-ink-400);
+  --text-inverse: var(--color-ink-950);
+  --brand: var(--color-gold-400);
+  --brand-contrast: var(--color-ink-950);
+  --accent: var(--color-aqua-300);
+  --ring: var(--color-aqua-400);
+}
+
+@layer base {
+  * {
+    border-color: var(--border-subtle);
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--surface);
+    color: var(--text-primary);
+    font-family: var(--font-sans);
+    font-feature-settings: 'ss01', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  /* One focus treatment everywhere, visible on gold, on photos and on glass. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+    border-radius: 0.375rem;
+  }
+
+  ::selection {
+    background: var(--color-gold-200);
+    color: var(--color-ink-950);
+  }
+
+  /* Respect a reduced-motion preference without disabling the interface. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .text-gradient-gold {
+    background: linear-gradient(
+      100deg,
+      var(--color-gold-700) 0%,
+      var(--color-gold-300) 28%,
+      var(--color-gold-600) 52%,
+      var(--color-gold-200) 76%,
+      var(--color-gold-500) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .surface-glass {
+    background: color-mix(in srgb, var(--surface) 72%, transparent);
+    backdrop-filter: saturate(180%) blur(16px);
+    -webkit-backdrop-filter: saturate(180%) blur(16px);
+  }
+
+  .hairline {
+    border: 1px solid var(--border-subtle);
+  }
+
+  /* A thin metallic edge used on cards and buttons that carry the brand. */
+  .edge-gold {
+    position: relative;
+  }
+  .edge-gold::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      140deg,
+      var(--color-gold-300),
+      transparent 38%,
+      transparent 62%,
+      var(--color-gold-500)
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .scrim-bottom {
+    background: linear-gradient(
+      to top,
+      rgb(7 9 12 / 0.92) 0%,
+      rgb(7 9 12 / 0.65) 38%,
+      rgb(7 9 12 / 0.15) 72%,
+      transparent 100%
+    );
+  }
+
+  /* Skeletons share one shimmer so loading states feel like one system. */
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--surface-sunken) 25%,
+      color-mix(in srgb, var(--surface-sunken) 60%, var(--border-subtle)) 37%,
+      var(--surface-sunken) 63%
+    );
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+  }
+}
+
+@layer utilities {
+  .container-page {
+    width: 100%;
+    margin-inline: auto;
+    padding-inline: 1rem;
+    max-width: 80rem;
+  }
+
+  @media (min-width: 640px) {
+    .container-page {
+      padding-inline: 1.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .container-page {
+      padding-inline: 2rem;
+    }
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    scrollbar-width: none;
+  }
+
+  .mask-fade-r {
+    mask-image: linear-gradient(to right, #000 82%, transparent 100%);
+  }
+
+  /*
+    A reveal that slides in from the side starts the element outside the
+    viewport. Below the fold on a phone that leaves the document permanently
+    wider than the screen, so the page scrolls sideways. Narrow screens get
+    the vertical reveal instead.
+  */
+  @media (max-width: 639px) {
+    [data-reveal-axis='x'][data-reveal='pending'] {
+      transform: translateY(28px) !important;
+    }
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@keyframes float-slow {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-14px) rotate(2deg);
+  }
+}
+
+@keyframes ripple-out {
+  0% {
+    transform: scale(0.85);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+@keyframes marquee-x {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
