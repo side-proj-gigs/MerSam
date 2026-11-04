@@ -9,7 +9,8 @@ import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type InvoiceRecord, type Paymen
 import { api } from '@/lib/api-client';
 import { formatMoney, newIdempotencyKey, toDateInput } from '@/lib/utils';
 import { Button, ButtonLink } from '@/components/ui/button';
-import { Input, Select, Textarea } from '@/components/ui/field';
+import { Input, Textarea } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 import { Dialog } from '@/components/ui/primitives';
 
 export function InvoiceActions({ invoice }: { invoice: InvoiceRecord }) {

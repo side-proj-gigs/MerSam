@@ -17,7 +17,8 @@ import {
 import { api, ApiError } from '@/lib/api-client';
 import { formatMoney, formatMoneyPlain, newIdempotencyKey, parseMoneyToMinor, toDateInput } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input, Select, Textarea } from '@/components/ui/field';
+import { Input, Textarea } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 import { Card, CardHeader } from '@/components/ui/primitives';
 
 interface LineDraft {

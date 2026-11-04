@@ -9,7 +9,8 @@ import { api, ApiError } from '@/lib/api-client';
 import { cn, newIdempotencyKey } from '@/lib/utils';
 import { useLocalStorage } from '@/hooks';
 import { Button } from '@/components/ui/button';
-import { Input, Select, Textarea } from '@/components/ui/field';
+import { Input, Textarea } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 
 const URGENCY_LABELS: Record<Urgency, string> = {
   flexible: 'Whenever suits you',

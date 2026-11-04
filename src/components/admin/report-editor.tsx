@@ -16,7 +16,8 @@ import type { InvoiceSummary } from '@app-layer/ports';
 import { api, ApiError } from '@/lib/api-client';
 import { formatMoneyPlain, newIdempotencyKey, parseMoneyToMinor, toDateInput } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input, Select, Textarea } from '@/components/ui/field';
+import { Input, Textarea } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 import { Card, CardHeader } from '@/components/ui/primitives';
 
 interface CostDraft {
@@ -176,21 +177,17 @@ export function ReportEditor({ report }: { report?: WorkReport }) {
               <Select
                 wrapperClassName="flex-1"
                 aria-label="Invoice"
-                defaultValue=""
-                onChange={(event) => {
-                  if (event.target.value) fromInvoice.mutate(event.target.value);
-                }}
+                value=""
+                placeholder={invoices.isPending ? 'Loading invoices' : 'Choose an invoice'}
                 disabled={fromInvoice.isPending}
-              >
-                <option value="">
-                  {invoices.isPending ? 'Loading invoices' : 'Choose an invoice'}
-                </option>
-                {invoices.data?.items.map((invoice) => (
-                  <option key={invoice.id} value={invoice.id}>
-                    {invoice.invoiceNumber} | {invoice.customerName}
-                  </option>
-                ))}
-              </Select>
+                options={(invoices.data?.items ?? []).map((invoice) => ({
+                  value: invoice.id,
+                  label: `${invoice.invoiceNumber} | ${invoice.customerName}`,
+                }))}
+                onValueChange={(invoiceId) => {
+                  if (invoiceId) fromInvoice.mutate(invoiceId);
+                }}
+              />
               <span className="flex items-center gap-2 self-center text-xs text-[var(--text-muted)]">
                 <Wand2 className="size-4" aria-hidden />
                 Or fill the form below

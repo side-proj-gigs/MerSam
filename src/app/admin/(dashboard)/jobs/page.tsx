@@ -8,7 +8,8 @@ import { JOB_STATUSES, type Client, type JobStatus, type JobWithRelations, type 
 import { api } from '@/lib/api-client';
 import { formatDate, newIdempotencyKey, toDateInput } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input, Select, Textarea } from '@/components/ui/field';
+import { Input, Textarea } from '@/components/ui/field';
+import { Select } from '@/components/ui/select';
 import { Dialog, StatusBadge } from '@/components/ui/primitives';
 import { PageHeader } from '@/components/admin/shell';
 import { DataTable, FilterChips, type Column } from '@/components/admin/data-table';

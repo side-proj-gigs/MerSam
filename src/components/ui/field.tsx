@@ -5,16 +5,15 @@ import {
   useId,
   type InputHTMLAttributes,
   type ReactNode,
-  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const CONTROL =
+export const CONTROL =
   'w-full rounded-xl border bg-[var(--surface)] px-3.5 py-2.5 text-sm text-[var(--text-primary)] transition-colors duration-150 placeholder:text-[var(--text-muted)] disabled:cursor-not-allowed disabled:opacity-60';
-const CONTROL_OK = 'border-[var(--border-strong)] hover:border-[var(--color-ink-400)]';
-const CONTROL_BAD = 'border-[var(--color-danger)]';
+export const CONTROL_OK = 'border-[var(--border-strong)] hover:border-[var(--color-ink-400)]';
+export const CONTROL_BAD = 'border-[var(--color-danger)]';
 
 export interface FieldShellProps {
   label?: string;
@@ -154,58 +153,6 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         className={cn(CONTROL, error ? CONTROL_BAD : CONTROL_OK, 'resize-y leading-relaxed', className)}
         {...props}
       />
-    </FieldShell>
-  );
-});
-
-export interface SelectProps extends SelectHTMLAttributes<HTMLSelectElement> {
-  label?: string;
-  hint?: string;
-  error?: string;
-  wrapperClassName?: string;
-  options?: { value: string; label: string }[];
-}
-
-export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select(
-  { label, hint, error, wrapperClassName, className, id, required, options, children, ...props },
-  ref,
-) {
-  const generated = useId();
-  const fieldId = id ?? generated;
-
-  return (
-    <FieldShell
-      label={label}
-      hint={hint}
-      error={error}
-      required={required}
-      htmlFor={fieldId}
-      className={wrapperClassName}
-    >
-      <select
-        ref={ref}
-        id={fieldId}
-        required={required}
-        aria-invalid={error ? true : undefined}
-        className={cn(
-          CONTROL,
-          error ? CONTROL_BAD : CONTROL_OK,
-          'appearance-none bg-[length:1.1rem] bg-[right_0.75rem_center] bg-no-repeat pr-10',
-          className,
-        )}
-        style={{
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236b7689' stroke-width='2'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M19 9l-7 7-7-7'/%3E%3C/svg%3E\")",
-        }}
-        {...props}
-      >
-        {options?.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-        {children}
-      </select>
     </FieldShell>
   );
 });
