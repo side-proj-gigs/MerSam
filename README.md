@@ -1,7 +1,8 @@
 # MerSam
 
 A full-stack web application for MerSam Water Systems and Plumbing Services: a public marketing
-site, an office dashboard, invoicing, work completion reports and shareable staff cards.
+site, an office dashboard, invoicing, proposals, work completion reports, outbound email and
+shareable staff cards.
 
 Built with Next.js 16 (App Router), TypeScript, Postgres on Neon, Drizzle ORM and Tailwind CSS v4,
 laid out in Clean Architecture.
@@ -31,6 +32,9 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 | `NEXT_PUBLIC_SITE_URL` | yes in production | Absolute site address. **Staff card QR codes encode this**, so a wrong value produces codes that point at the wrong host |
 | `STORAGE_DRIVER` | no | `s3` for Neon object storage, `local` to keep uploads in Postgres |
 | `S3_*` | if `STORAGE_DRIVER=s3` | Endpoint, bucket, region and credentials |
+| `RESEND_API_KEY` | no | Enables outbound email. Left blank, the dashboard says so plainly and every document is still downloadable |
+| `EMAIL_FROM` | if sending | Sender address. Must be on a domain verified with Resend |
+| `EMAIL_FROM_NAME` / `EMAIL_REPLY_TO` | no | Display name and reply address |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | no | Owner account created by the seed |
 
 ---
@@ -44,6 +48,7 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 | `npm run typecheck` | TypeScript across the whole project |
 | `npm test` | Unit tests (Vitest) |
 | `npm run test:e2e` | End-to-end tests (Playwright) against a production build |
+| `npm run verify:email` | Renders every outbound message to `.local/email-preview` and checks it, sending nothing |
 | `npm run qa:reset` | Removes the records the test suite creates, keeping the seeded examples |
 | `npm run db:generate` | Generate a migration from schema changes |
 | `npm run db:migrate` | Apply pending migrations |
@@ -61,10 +66,30 @@ Service and project pages are statically generated and revalidated every five mi
 ### Office dashboard (`/admin`)
 - **Enquiries** from the public quote form, with status, notes and one-click conversion to a client
 - **Clients** and **Jobs**
+- **Proposals**: a priced letter to a potential client, drafted straight from an enquiry, with
+  grouped scope sections, optional extras quoted outside the total, PDF and Word export, and a
+  recorded decision when the client answers
 - **Invoices**: line items, discounts, VAT, payments, PDF and Word export
 - **Work reports**: the numbered completion and payment report, PDF and Word export
 - **Services**, **Content** (testimonials, projects, FAQs), **Media**, **Settings**
 - **Team**: accounts, roles and each person's digital business card
+
+### Outbound email
+Resend carries the messages, and it is treated as optional throughout. With no API key the
+dashboard says which piece is missing, every document stays downloadable, and nothing fails.
+With a key configured, five messages go out:
+
+| Message | Sent when |
+|---|---|
+| Enquiry confirmation | Somebody submits the public quote form, carrying their reference |
+| Office alert | The same submission, so nobody has to watch the dashboard |
+| Invoice | Sent from the invoice, with the PDF attached |
+| Work report | Sent from the report, with the PDF attached |
+| Proposal | Sent from the proposal. A successful send is what marks it as issued |
+
+Every attempt is written to an email log whether it succeeded, failed or was skipped, so the
+detail pages can say when a document last reached someone. The office is blind copied on
+everything, and Settings, Email has a send-a-test button that proves the whole path end to end.
 
 ### Digital business cards (`/card/<slug>`)
 Each member of staff can be given a shareable card carrying their photograph, role, contact
@@ -117,19 +142,23 @@ Full detail, including the non-obvious decisions and the bugs found while testin
 ## Testing
 
 ```bash
-npm test          # 62 unit tests
-npm run test:e2e  # 50 end-to-end tests, desktop and phone
+npm test          # 85 unit tests
+npm run test:e2e  # 66 end-to-end tests, desktop and phone
 ```
 
-The unit tests cover the money arithmetic, invoice and report totals, status transitions, value
-objects, document numbering and vCard generation. Two of them assert that the system reproduces
+The unit tests cover the money arithmetic, invoice, proposal and report totals, status
+transitions, value objects, document numbering, vCard generation and the email dispatcher, which
+has to report a provider failure as an outcome rather than throw it at whoever raised the
+invoice. Two of them assert that the system reproduces
 the totals on the real signed invoice and work report the company already uses, and five enforce
 the Clean Architecture dependency rule so it cannot erode one convenient import at a time.
 
 The end-to-end tests run against a production build and cover the public pages, the enquiry form
 (including its idempotency and duplicate handling), sign in and its rate limiting, the full
-invoice lifecycle through to PDF and Word output, report generation, the digital card, and phone
-layout. One of them decodes a generated QR code with a real decoder, because a branded code that
+invoice lifecycle through to PDF and Word output, proposal writing through to a recorded
+decision, report generation, the digital card, and phone layout. The email tests assert the
+behaviour that has to hold whether or not a provider is configured, which is that the dashboard
+states up front what will happen rather than failing after someone has composed a message. One of them decodes a generated QR code with a real decoder, because a branded code that
 does not scan is worse than no code at all.
 
 ---
@@ -147,6 +176,9 @@ does not scan is worse than no code at all.
 - Neon suspends idle compute, which closes pooled connections. The pool handles that: it logs the
   dropped client and retries connection-level failures, so a suspend is invisible rather than an
   error. `npx tsx scripts/verify-db-recovery.ts` demonstrates it against your own database.
+- Email is off until `RESEND_API_KEY` and `EMAIL_FROM` are set **and** the box is ticked under
+  Settings, Email. Verify the sending domain with Resend first, or messages are accepted by the
+  API and then rejected downstream.
 - TLS is configured in code with certificate verification on, rather than inherited from the
   `sslmode` parameter. Leave `sslmode=require` in the connection string; it is stripped before the
   driver sees it and the stronger setting is applied.

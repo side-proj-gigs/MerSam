@@ -15,7 +15,13 @@ import type {
   Service,
   ServiceCategory,
   ServiceWithCategory,
-  SiteSettings,
+  EmailKind,
+  EmailLogEntry,
+  EmailMessage,
+  EmailResult,
+  Proposal,
+  ProposalStatus,
+  SiteSettings as SiteSettingsEntity,
   Testimonial,
   User,
   UserWithSecret,
@@ -118,8 +124,8 @@ export interface MediaRepository {
 }
 
 export interface SettingsRepository {
-  get(): Promise<SiteSettings>;
-  update(data: Partial<SiteSettings>): Promise<SiteSettings>;
+  get(): Promise<SiteSettingsEntity>;
+  update(data: Partial<SiteSettingsEntity>): Promise<SiteSettingsEntity>;
 }
 
 /* ----------------------------------------------------------------- CRM side */
@@ -344,6 +350,86 @@ export interface Notifier {
   notifyNewLead(lead: Lead): Promise<void>;
 }
 
+/* -------------------------------------------------------------- outbound */
+
+/**
+ * Sending email is optional. When no provider is configured the adapter still
+ * exists and reports `configured: false`, so every caller takes one path and
+ * the application degrades to "nothing was sent" rather than throwing.
+ */
+export interface EmailSender {
+  readonly configured: boolean;
+  /** Describes why sending is unavailable, for the admin to act on. */
+  readonly unavailableReason: string | null;
+  send(message: EmailMessage): Promise<EmailResult>;
+}
+
+export interface EmailLogRepository {
+  record(entry: {
+    kind: EmailKind;
+    status: 'sent' | 'failed' | 'skipped';
+    recipient: string;
+    subject: string;
+    entityType?: string | null;
+    entityId?: UUID | null;
+    providerId?: string | null;
+    error?: string | null;
+    sentBy?: UUID | null;
+  }): Promise<void>;
+
+  list(filters: ListQuery & { entityType?: string; entityId?: UUID }): Promise<Page<EmailLogEntry>>;
+  /** Used to tell the admin when a document last reached someone. */
+  lastSuccessFor(entityType: string, entityId: UUID): Promise<EmailLogEntry | null>;
+}
+
+/**
+ * Rendering a document is an infrastructure concern, but a use case that
+ * emails an invoice needs the bytes. This keeps the use case free of any
+ * knowledge of how a PDF is produced.
+ */
+export interface DocumentRenderer {
+  invoicePdf(invoiceId: UUID): Promise<{ filename: string; content: Buffer }>;
+  workReportPdf(reportId: UUID): Promise<{ filename: string; content: Buffer }>;
+  proposalPdf(proposalId: UUID): Promise<{ filename: string; content: Buffer }>;
+}
+
+/* ------------------------------------------------------------- proposals */
+
+export interface ProposalFilters extends ListQuery {
+  status?: ProposalStatus;
+  clientId?: UUID;
+  from?: Date;
+  to?: Date;
+}
+
+export interface ProposalSummary {
+  id: UUID;
+  proposalNumber: string;
+  clientName: string;
+  title: string;
+  issuedOn: Date;
+  validUntil: Date | null;
+  status: ProposalStatus;
+  currency: string;
+  totalMinor: number;
+  clientEmail: string | null;
+}
+
+export interface ProposalRepository {
+  list(filters: ProposalFilters): Promise<Page<ProposalSummary>>;
+  findById(id: UUID): Promise<Proposal | null>;
+  findByNumber(proposalNumber: string): Promise<Proposal | null>;
+  create(data: Omit<Proposal, 'createdAt' | 'updatedAt'>): Promise<Proposal>;
+  update(
+    id: UUID,
+    data: Partial<Omit<Proposal, 'items'>>,
+    items?: Proposal['items'],
+  ): Promise<Proposal>;
+  delete(id: UUID): Promise<void>;
+  nextSequence(year: number): Promise<number>;
+  countByStatus(): Promise<Record<string, number>>;
+}
+
 /** Everything the composition root wires together, handed to the use cases. */
 export interface Repositories {
   services: ServiceRepository;
@@ -361,4 +447,6 @@ export interface Repositories {
   workReports: WorkReportRepository;
   users: UserRepository;
   audit: AuditLogRepository;
+  proposals: ProposalRepository;
+  emailLog: EmailLogRepository;
 }

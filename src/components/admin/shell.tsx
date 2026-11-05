@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   Briefcase,
   ChevronDown,
+  FileSignature,
   FileText,
   Globe,
   Images,
@@ -52,6 +53,7 @@ const NAV_GROUPS: { heading: string; items: NavItem[] }[] = [
   {
     heading: 'Finance',
     items: [
+      { href: '/admin/proposals', label: 'Proposals', Icon: FileSignature, minRole: 'viewer' },
       { href: '/admin/invoices', label: 'Invoices', Icon: Receipt, minRole: 'viewer' },
       { href: '/admin/reports', label: 'Work reports', Icon: FileText, minRole: 'viewer' },
     ],

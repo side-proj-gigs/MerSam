@@ -2,6 +2,8 @@ import 'server-only';
 import type {
   Cache,
   Clock,
+  DocumentRenderer,
+  EmailSender,
   IdempotencyStore,
   IdGenerator,
   Notifier,
@@ -22,6 +24,9 @@ import {
   systemClock,
   uuidGenerator,
 } from './services';
+import { createEmailNotifier } from './email/notifier';
+import { createResendSender } from './email/resend';
+import { documentRenderer } from './documents/renderer';
 
 export interface Container {
   repos: Repositories;
@@ -34,14 +39,9 @@ export interface Container {
   idempotency: IdempotencyStore;
   rateLimiter: RateLimiter;
   notifier: Notifier;
+  emailSender: EmailSender;
+  documents: DocumentRenderer;
 }
-
-/** Logs new enquiries. A mail or SMS adapter slots in here later. */
-const consoleNotifier: Notifier = {
-  async notifyNewLead(lead) {
-    console.info(`[lead] ${lead.reference} from ${lead.fullName} (${lead.phone})`);
-  },
-};
 
 const globalForContainer = globalThis as unknown as { __mersamContainer?: Container };
 
@@ -56,7 +56,9 @@ function build(): Container {
     cache: memoryCache,
     idempotency: pgIdempotency,
     rateLimiter: pgRateLimiter,
-    notifier: consoleNotifier,
+    notifier: createEmailNotifier(),
+    emailSender: createResendSender(),
+    documents: documentRenderer,
   };
 }
 

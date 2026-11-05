@@ -28,14 +28,17 @@ export default async function InvoiceDetailPage({
   const invoice = await repos.invoices.findById(id).catch(() => null);
   if (!invoice) notFound();
 
-  const payments = await repos.payments.listForInvoice(id);
+  const [payments, lastEmail] = await Promise.all([
+    repos.payments.listForInvoice(id),
+    repos.emailLog.lastSuccessFor('invoice', id),
+  ]);
 
   return (
     <>
       <PageHeader
         title={`Invoice ${invoice.invoiceNumber}`}
         description={`${invoice.customerName}, issued ${formatDate(invoice.issuedOn, 'long')}`}
-        action={<InvoiceActions invoice={invoice} />}
+        action={<InvoiceActions invoice={invoice} lastSentAt={lastEmail?.createdAt ?? null} />}
       />
 
       <div className="grid gap-5 lg:grid-cols-3">

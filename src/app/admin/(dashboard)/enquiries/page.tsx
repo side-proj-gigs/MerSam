@@ -1,12 +1,13 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Phone, UserPlus } from 'lucide-react';
+import { FileSignature, Phone, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { LEAD_STATUSES, type Lead, type LeadStatus } from '@core/entities';
 import { api } from '@/lib/api-client';
-import { formatRelative, truncate } from '@/lib/utils';
+import { formatRelative, newIdempotencyKey, truncate } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
@@ -117,8 +118,12 @@ export default function EnquiriesPage() {
 
 function LeadDetail({ lead, onClose }: { lead: Lead; onClose: () => void }) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [status, setStatus] = useState<LeadStatus>(lead.status);
   const [note, setNote] = useState('');
+  // One key for the life of the dialog, so an impatient double click drafts
+  // one proposal rather than two with consecutive numbers.
+  const [draftKey] = useState(() => newIdempotencyKey('proposal'));
 
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ['leads'] });
@@ -151,6 +156,24 @@ function LeadDetail({ lead, onClose }: { lead: Lead; onClose: () => void }) {
     onError: (error: Error) => toast.error(error.message),
   });
 
+  const draftProposal = useMutation({
+    mutationFn: () =>
+      api.post<{ id: string; proposalNumber: string }>(
+        '/api/admin/proposals/from-lead',
+        { leadId: lead.id },
+        { idempotencyKey: draftKey },
+      ),
+    onSuccess: (proposal) => {
+      toast.success(`Proposal ${proposal.proposalNumber} started`, {
+        description: 'The enquiry wording has been carried across. Price the scope and send it.',
+      });
+      invalidate();
+      void queryClient.invalidateQueries({ queryKey: ['proposals'] });
+      router.push(`/admin/proposals/${proposal.id}/edit`);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
   return (
     <Dialog
       open
@@ -173,6 +196,14 @@ function LeadDetail({ lead, onClose }: { lead: Lead; onClose: () => void }) {
               Convert to client
             </Button>
           )}
+          <Button
+            variant="outline"
+            loading={draftProposal.isPending}
+            onClick={() => draftProposal.mutate()}
+            leadingIcon={<FileSignature className="size-4" aria-hidden />}
+          >
+            Draft a proposal
+          </Button>
           <Button
             variant="gold"
             loading={update.isPending}

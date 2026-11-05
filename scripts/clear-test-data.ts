@@ -1,7 +1,14 @@
 import 'dotenv/config';
 import { inArray } from 'drizzle-orm';
 import { db, pool } from '../src/infrastructure/db/client';
-import { idempotencyKeys, invoices, leads, rateLimitBuckets, workReports } from '../src/infrastructure/db/schema';
+import {
+  idempotencyKeys,
+  invoices,
+  leads,
+  proposals,
+  rateLimitBuckets,
+  workReports,
+} from '../src/infrastructure/db/schema';
 
 /**
  * Removes the records the end-to-end suite creates, so repeated runs do not
@@ -11,7 +18,14 @@ import { idempotencyKeys, invoices, leads, rateLimitBuckets, workReports } from 
  * Payments and cost lines are removed by their cascading foreign keys.
  */
 const TEST_CUSTOMERS = ['Playwright Test Customer', 'Idempotent Customer', 'Report Source Customer'];
-const TEST_LEADS = ['Playwright Visitor', 'Debug Visitor', 'Idempotency Check', 'Spam Bot'];
+const TEST_LEADS = [
+  'Playwright Visitor',
+  'Debug Visitor',
+  'Idempotency Check',
+  'Spam Bot',
+  'Proposal Source Enquiry',
+];
+const TEST_PROSPECTS = ['Playwright Prospect', 'Proposal Source Enquiry'];
 
 async function main() {
   const removedReports = await db
@@ -24,13 +38,20 @@ async function main() {
     .where(inArray(invoices.customerName, TEST_CUSTOMERS))
     .returning({ id: invoices.id });
 
+  // Proposals go before leads: one points at the other.
+  const removedProposals = await db
+    .delete(proposals)
+    .where(inArray(proposals.clientName, TEST_PROSPECTS))
+    .returning({ id: proposals.id });
+
   const removedLeads = await db
     .delete(leads)
     .where(inArray(leads.fullName, TEST_LEADS))
     .returning({ id: leads.id });
 
   console.log(
-    `removed  reports=${removedReports.length}  invoices=${removedInvoices.length}  leads=${removedLeads.length}`,
+    `removed  reports=${removedReports.length}  invoices=${removedInvoices.length}` +
+      `  proposals=${removedProposals.length}  leads=${removedLeads.length}`,
   );
 
   await db.delete(rateLimitBuckets);

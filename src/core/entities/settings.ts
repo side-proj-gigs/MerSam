@@ -77,6 +77,16 @@ export interface SiteSettings extends Timestamped {
   seoDescription: string;
   seoKeywords: string[];
   ogImageUrl: string | null;
+
+  /* Outbound email. The provider key lives in the environment, never here. */
+  emailEnabled: boolean;
+  emailFromName: string | null;
+  emailFromAddress: string | null;
+  emailReplyTo: string | null;
+  /** Internal copy of every message, so the office keeps its own record. */
+  emailBcc: string | null;
+  emailSignature: string | null;
+  sendEnquiryConfirmation: boolean;
 }
 
 export const WEEKDAYS = [

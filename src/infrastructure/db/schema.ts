@@ -71,6 +71,22 @@ export const paymentStateEnum = pgEnum('payment_state', ['fully_paid', 'part_pay
 export const workReportStatusEnum = pgEnum('work_report_status', ['draft', 'issued', 'archived']);
 export const projectStatusEnum = pgEnum('project_status', ['completed', 'ongoing']);
 export const mediaSourceEnum = pgEnum('media_source', ['upload', 'external']);
+export const proposalStatusEnum = pgEnum('proposal_status', [
+  'draft',
+  'sent',
+  'accepted',
+  'declined',
+  'expired',
+]);
+export const emailKindEnum = pgEnum('email_kind', [
+  'enquiry_confirmation',
+  'lead_notification',
+  'invoice',
+  'work_report',
+  'proposal',
+  'test',
+]);
+export const emailStatusEnum = pgEnum('email_status', ['sent', 'failed', 'skipped']);
 
 /* ------------------------------------------------------------- helpers */
 
@@ -177,6 +193,17 @@ export const siteSettings = pgTable('site_settings', {
   seoDescription: text('seo_description').notNull(),
   seoKeywords: jsonb('seo_keywords').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   ogImageUrl: text('og_image_url'),
+
+  /* Outbound email. The provider key itself lives in the environment and is
+     never stored here, so a database dump cannot leak the ability to send. */
+  emailEnabled: boolean('email_enabled').notNull().default(false),
+  emailFromName: varchar('email_from_name', { length: 160 }),
+  emailFromAddress: varchar('email_from_address', { length: 254 }),
+  emailReplyTo: varchar('email_reply_to', { length: 254 }),
+  /** Internal copy of everything sent, so the office keeps its own record. */
+  emailBcc: varchar('email_bcc', { length: 254 }),
+  emailSignature: text('email_signature'),
+  sendEnquiryConfirmation: boolean('send_enquiry_confirmation').notNull().default(true),
   ...timestamps,
 });
 
@@ -543,6 +570,114 @@ export const mediaBlobs = pgTable('media_blobs', {
   createdAt: timestamps.createdAt,
 });
 
+/* ----------------------------------------------------------- proposals */
+
+/**
+ * A proposal is a letter with a priced scope attached. The narrative fields
+ * carry the letter, the line items carry the table, and the money columns
+ * behave exactly like an invoice so one set of rules covers both.
+ */
+export const proposals = pgTable(
+  'proposals',
+  {
+    id: pk(),
+    proposalNumber: varchar('proposal_number', { length: 32 }).notNull(),
+    clientId: uuid('client_id').references(() => clients.id, { onDelete: 'set null' }),
+    leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
+
+    clientName: varchar('client_name', { length: 200 }).notNull(),
+    clientCompany: varchar('client_company', { length: 200 }),
+    clientEmail: varchar('client_email', { length: 254 }),
+    clientPhone: varchar('client_phone', { length: 32 }),
+    clientAddress: text('client_address'),
+
+    title: varchar('title', { length: 240 }).notNull(),
+    salutation: varchar('salutation', { length: 160 }).notNull().default('Dear Sir or Madam'),
+    introduction: text('introduction').notNull().default(''),
+    scopeIntro: text('scope_intro').notNull().default(''),
+    closing: text('closing').notNull().default(''),
+    termsText: text('terms_text').notNull().default(''),
+    paymentTerms: text('payment_terms').notNull().default(''),
+    notes: text('notes'),
+
+    preparedBy: varchar('prepared_by', { length: 160 }).notNull().default('MerSam'),
+    preparedByRole: varchar('prepared_by_role', { length: 160 }),
+
+    currency: varchar('currency', { length: 3 }).notNull().default('GHS'),
+    discountKind: discountKindEnum('discount_kind').notNull().default('none'),
+    discountValue: numeric('discount_value', { precision: 12, scale: 2 }).notNull().default('0'),
+    vatRate: numeric('vat_rate', { precision: 5, scale: 2 }).notNull().default('0'),
+    subtotalMinor: integer('subtotal_minor').notNull().default(0),
+    discountMinor: integer('discount_minor').notNull().default(0),
+    vatMinor: integer('vat_minor').notNull().default(0),
+    totalMinor: integer('total_minor').notNull().default(0),
+
+    issuedOn: date('issued_on').notNull(),
+    validUntil: date('valid_until'),
+    status: proposalStatusEnum('status').notNull().default('draft'),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
+
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex('proposals_number_unique').on(t.proposalNumber),
+    index('proposals_status_idx').on(t.status, t.issuedOn.desc()),
+    index('proposals_client_idx').on(t.clientId),
+  ],
+);
+
+export const proposalItems = pgTable(
+  'proposal_items',
+  {
+    id: pk(),
+    proposalId: uuid('proposal_id')
+      .notNull()
+      .references(() => proposals.id, { onDelete: 'cascade' }),
+    /** Groups items under a heading, for example a phase or a work package. */
+    section: varchar('section', { length: 160 }),
+    title: varchar('title', { length: 240 }).notNull(),
+    description: text('description').notNull().default(''),
+    unitOfMeasure: varchar('unit_of_measure', { length: 32 }).notNull().default('Item'),
+    quantity: numeric('quantity', { precision: 12, scale: 2 }).notNull().default('1'),
+    unitPriceMinor: integer('unit_price_minor').notNull().default(0),
+    lineTotalMinor: integer('line_total_minor').notNull().default(0),
+    /** Priced but excluded from the total until the client asks for it. */
+    isOptional: boolean('is_optional').notNull().default(false),
+    sortOrder: integer('sort_order').notNull().default(0),
+  },
+  (t) => [index('proposal_items_proposal_idx').on(t.proposalId, t.sortOrder)],
+);
+
+/* --------------------------------------------------------------- email */
+
+/**
+ * Every send attempt is recorded, successful or not. It gives the office a
+ * record of what went out, and it is what makes resending safe: the use case
+ * can see that a document has already reached an address.
+ */
+export const emailLog = pgTable(
+  'email_log',
+  {
+    id: pk(),
+    kind: emailKindEnum('kind').notNull(),
+    status: emailStatusEnum('status').notNull(),
+    recipient: varchar('recipient', { length: 254 }).notNull(),
+    subject: varchar('subject', { length: 400 }).notNull(),
+    entityType: varchar('entity_type', { length: 40 }),
+    entityId: uuid('entity_id'),
+    providerId: varchar('provider_id', { length: 120 }),
+    error: text('error'),
+    sentBy: uuid('sent_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: timestamps.createdAt,
+  },
+  (t) => [
+    index('email_log_entity_idx').on(t.entityType, t.entityId, t.createdAt.desc()),
+    index('email_log_created_idx').on(t.createdAt.desc()),
+  ],
+);
+
 /* --------------------------------------------------------- idempotency */
 
 export const idempotencyKeys = pgTable(
@@ -604,6 +739,16 @@ export const workReportCostLinesRelations = relations(workReportCostLines, ({ on
 export const jobsRelations = relations(jobs, ({ one }) => ({
   client: one(clients, { fields: [jobs.clientId], references: [clients.id] }),
   service: one(services, { fields: [jobs.serviceId], references: [services.id] }),
+}));
+
+export const proposalsRelations = relations(proposals, ({ many, one }) => ({
+  items: many(proposalItems),
+  client: one(clients, { fields: [proposals.clientId], references: [clients.id] }),
+  lead: one(leads, { fields: [proposals.leadId], references: [leads.id] }),
+}));
+
+export const proposalItemsRelations = relations(proposalItems, ({ one }) => ({
+  proposal: one(proposals, { fields: [proposalItems.proposalId], references: [proposals.id] }),
 }));
 
 export const paymentsRelations = relations(payments, ({ one }) => ({

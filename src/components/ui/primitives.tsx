@@ -104,6 +104,9 @@ export const STATUS_TONES: Record<string, Tone> = {
   fully_paid: 'success',
   part_payment: 'warning',
   unpaid: 'danger',
+  accepted: 'success',
+  declined: 'danger',
+  expired: 'warning',
 };
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

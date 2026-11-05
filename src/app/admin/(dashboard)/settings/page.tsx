@@ -2,24 +2,26 @@
 
 import { useEffect, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Save } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Save, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import type { SiteSettings } from '@core/entities';
 import { api } from '@/lib/api-client';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Textarea } from '@/components/ui/field';
-import { Card, CardHeader } from '@/components/ui/primitives';
+import { Badge, Card, CardHeader } from '@/components/ui/primitives';
 import { LoadingPanel } from '@/components/ui/water-loader';
 import { PageHeader } from '@/components/admin/shell';
+import { useEmailStatus } from '@/components/admin/send-email-dialog';
 
-type Tab = 'company' | 'contact' | 'hero' | 'documents' | 'seo';
+type Tab = 'company' | 'contact' | 'hero' | 'documents' | 'email' | 'seo';
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'company', label: 'Company' },
   { value: 'contact', label: 'Contact' },
   { value: 'hero', label: 'Home page' },
   { value: 'documents', label: 'Invoices and reports' },
+  { value: 'email', label: 'Email' },
   { value: 'seo', label: 'Search' },
 ];
 
@@ -299,6 +301,14 @@ export default function SettingsPage() {
         </Card>
       )}
 
+      {tab === 'email' && (
+        <EmailSettings
+          draft={draft}
+          set={set}
+          text={text}
+        />
+      )}
+
       {tab === 'seo' && (
         <Card>
           <CardHeader title="Search" description="How the site appears in results and when shared" />
@@ -343,5 +353,179 @@ export default function SettingsPage() {
         </Card>
       )}
     </>
+  );
+}
+
+/**
+ * The email tab is the only settings panel that reports on something outside
+ * the database. The provider key is an environment variable, so the form can
+ * be filled in perfectly and sending can still be impossible. Saying which of
+ * the two is missing, and letting someone prove it with a real message, saves
+ * a long hunt later.
+ */
+function EmailSettings({
+  draft,
+  set,
+  text,
+}: {
+  draft: Partial<SiteSettings>;
+  set: <K extends keyof SiteSettings>(key: K, value: SiteSettings[K]) => void;
+  text: (key: keyof SiteSettings) => string;
+}) {
+  const status = useEmailStatus();
+  const [testTo, setTestTo] = useState('');
+
+  const sendTest = useMutation({
+    mutationFn: () =>
+      api.post<{ status: string; recipient: string; reason: string | null }>(
+        '/api/admin/email/test',
+        { to: testTo.trim() },
+        { idempotent: false },
+      ),
+    onSuccess: (outcome) => {
+      if (outcome.status === 'sent') {
+        toast.success(`Test message sent to ${outcome.recipient}`, {
+          description: 'If it does not arrive, check the spam folder and the sending domain.',
+        });
+        return;
+      }
+      toast.error(outcome.reason ?? 'Nothing was sent', { duration: 8000 });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  const provider = status.data;
+  const ready = Boolean(provider?.enabled && provider?.configured);
+  const validTest = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(testTo.trim());
+
+  return (
+    <div className="flex flex-col gap-5">
+      <Card>
+        <CardHeader
+          title="Provider"
+          description="Resend delivers the messages. Its API key is read from the environment, never stored here."
+          action={
+            provider ? (
+              <Badge tone={ready ? 'success' : 'warning'}>{ready ? 'Ready' : 'Not sending'}</Badge>
+            ) : undefined
+          }
+        />
+        <div className="p-5">
+          <div
+            className={cn(
+              'flex gap-3 rounded-xl border p-4 text-sm',
+              ready
+                ? 'border-[color-mix(in_srgb,var(--color-success)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-success)_10%,transparent)]'
+                : 'border-[color-mix(in_srgb,var(--color-warning)_30%,transparent)] bg-[color-mix(in_srgb,var(--color-warning)_10%,transparent)]',
+            )}
+          >
+            {ready ? (
+              <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-[var(--color-success)]" aria-hidden />
+            ) : (
+              <AlertTriangle className="mt-0.5 size-4 shrink-0 text-[var(--color-warning)]" aria-hidden />
+            )}
+            <div>
+              <p className="font-semibold text-[var(--text-primary)]">
+                {ready
+                  ? `Messages go out from ${provider?.from}`
+                  : !provider?.enabled
+                    ? 'Sending is switched off'
+                    : 'No provider is configured'}
+              </p>
+              <p className="mt-0.5 text-[var(--text-secondary)]">
+                {ready
+                  ? 'Invoices, work reports, proposals and enquiry confirmations will all be delivered.'
+                  : !provider?.enabled
+                    ? 'Tick the box below and save. Everything else keeps working in the meantime, documents simply have to be downloaded and sent by hand.'
+                    : (provider?.reason ??
+                      'Set RESEND_API_KEY and EMAIL_FROM in the environment, then restart the app.')}
+              </p>
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader title="Sender" description="How your messages appear in a client inbox" />
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          <Checkbox
+            label="Send email from the dashboard"
+            description="Turn this off to stop every outbound message at once without touching the configuration."
+            className="sm:col-span-2"
+            checked={draft.emailEnabled ?? false}
+            onChange={(e) => set('emailEnabled', e.target.checked)}
+          />
+          <Input
+            label="From name"
+            value={text('emailFromName')}
+            onChange={(e) => set('emailFromName', e.target.value)}
+            placeholder="MerSam Water Engineering"
+          />
+          <Input
+            label="From address"
+            type="email"
+            value={text('emailFromAddress')}
+            onChange={(e) => set('emailFromAddress', e.target.value)}
+            placeholder="accounts@mersam.com"
+            hint="Must be on a domain verified with Resend"
+          />
+          <Input
+            label="Reply to"
+            type="email"
+            value={text('emailReplyTo')}
+            onChange={(e) => set('emailReplyTo', e.target.value)}
+            hint="Where a client reply should land"
+          />
+          <Input
+            label="Blind copy"
+            type="email"
+            value={text('emailBcc')}
+            onChange={(e) => set('emailBcc', e.target.value)}
+            hint="Keeps an office copy of everything sent"
+          />
+          <Textarea
+            label="Signature"
+            wrapperClassName="sm:col-span-2"
+            rows={4}
+            value={text('emailSignature')}
+            onChange={(e) => set('emailSignature', e.target.value)}
+            hint="Closes every message. One line per line."
+          />
+          <Checkbox
+            label="Confirm every website enquiry"
+            description="The person who filled in the contact form gets their reference number straight away, and the office is alerted."
+            className="sm:col-span-2"
+            checked={draft.sendEnquiryConfirmation ?? true}
+            onChange={(e) => set('sendEnquiryConfirmation', e.target.checked)}
+          />
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Send a test"
+          description="Save your changes first, then prove the whole path with a real message"
+        />
+        <div className="flex flex-col gap-3 p-5 sm:flex-row sm:items-end">
+          <Input
+            label="Send to"
+            wrapperClassName="flex-1"
+            type="email"
+            value={testTo}
+            onChange={(e) => setTestTo(e.target.value)}
+            placeholder="you@example.com"
+          />
+          <Button
+            variant="secondary"
+            loading={sendTest.isPending}
+            disabled={!validTest}
+            onClick={() => sendTest.mutate()}
+            leadingIcon={<Send className="size-4" aria-hidden />}
+          >
+            Send test
+          </Button>
+        </div>
+      </Card>
+    </div>
   );
 }

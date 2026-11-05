@@ -23,8 +23,15 @@ export default async function ReportDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const report = await repositories().workReports.findById(id).catch(() => null);
+  const repos = repositories();
+  const report = await repos.workReports.findById(id).catch(() => null);
   if (!report) notFound();
+
+  // The report itself carries no address, so the client record supplies one.
+  const [client, lastEmail] = await Promise.all([
+    report.clientId ? repos.clients.findById(report.clientId).catch(() => null) : null,
+    repos.emailLog.lastSuccessFor('work_report', id),
+  ]);
 
   const sections = [
     { number: 1, heading: 'Introduction', body: report.introduction },
@@ -39,7 +46,13 @@ export default async function ReportDetailPage({
       <PageHeader
         title={report.title}
         description={`${report.reportNumber} for ${report.clientName}, ${formatDate(report.reportDate, 'long')}`}
-        action={<ReportActions report={report} />}
+        action={
+          <ReportActions
+            report={report}
+            clientEmail={client?.email ?? null}
+            lastSentAt={lastEmail?.createdAt ?? null}
+          />
+        }
       />
 
       <div className="grid gap-5 lg:grid-cols-3">

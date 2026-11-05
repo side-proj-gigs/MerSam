@@ -63,6 +63,7 @@ test.describe('admin workspace', () => {
       ['Clients', /Clients/i],
       ['Jobs', /Jobs/i],
       ['Invoices', /Invoices/i],
+      ['Proposals', /Proposals/i],
       ['Work reports', /Work reports/i],
       ['Services', /Services/i],
       ['Content', /Website content/i],

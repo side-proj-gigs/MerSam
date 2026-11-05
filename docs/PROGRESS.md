@@ -11,7 +11,9 @@ verified.
 |---|---|
 | Public marketing site | Home, services index, 13 service detail pages, projects index and detail, about, FAQ, contact |
 | Enquiry capture | Public quote form through to a lead in the dashboard, with rate limiting, honeypot and duplicate handling |
-| Office dashboard | Enquiries, clients, jobs, invoices, work reports, services, content, media, settings, team |
+| Office dashboard | Enquiries, clients, jobs, proposals, invoices, work reports, services, content, media, settings, team |
+| Proposals | A priced letter to a potential client, drafted from an enquiry, grouped scope sections, optional extras outside the total, PDF and Word export, emailable, decision recorded |
+| Outbound email | Resend, optional throughout: enquiry confirmation, office alert, invoice, work report and proposal, every attempt logged |
 | Invoicing | Line items, discounts, VAT, payments, status lifecycle, PDF and Word export |
 | Work reports | The numbered completion and payment report, buildable from an invoice, PDF and Word export |
 | Digital staff cards | Public card page, branded QR in three themes, lock-screen wallpaper, vCard download |
@@ -34,16 +36,24 @@ turnaround and its own statically generated page. All editable in the dashboard.
 
 Everything below was run, not assumed.
 
-### Unit tests: 62 passing
+### Unit tests: 85 passing
 
 ```
 tests/unit/architecture.test.ts    5 tests
 tests/unit/money.test.ts           8 tests
 tests/unit/invoice.test.ts        16 tests
+tests/unit/proposal.test.ts       15 tests
+tests/unit/email.test.ts           8 tests
 tests/unit/domain.test.ts         19 tests
 tests/unit/db-resilience.test.ts   6 tests
 tests/unit/db-connection.test.ts   8 tests
 ```
+
+The proposal tests pin down the one piece of arithmetic that is easy to get wrong: an optional
+extra is quoted beside the total, never inside it, and it must not attract VAT in the quoted
+figure either. The email tests pin down the dispatcher's promise, which is that a missing API
+key, a switched-off toggle, a malformed address and a provider outage all produce an outcome the
+caller can report, never an exception thrown at whoever was raising the invoice.
 
 The architecture tests fail the build if the domain ever imports a framework, if a use case ever
 imports infrastructure, or if a route reaches the database outside the dependency builders.
@@ -55,7 +65,7 @@ Two assert against the company's real paperwork:
 - The Shola work report totals **GHC 2,800.00**, fully paid, zero outstanding, matching the signed
   report.
 
-### End-to-end tests: 50 passing
+### End-to-end tests: 66 passing
 
 Run against a production build on a desktop viewport and a Pixel 7.
 
@@ -68,6 +78,14 @@ idempotency, the seeded work report, report generation from an invoice, debounce
 out, the digital card and its flip, the vCard, all three QR themes, the wallpaper, and phone
 layout including horizontal-overflow checks on seven pages.
 
+Proposals and email add: the seeded proposal keeping its optional extras outside the total, a
+proposal written from scratch through pricing, PDF and Word download, mark as sent, a recorded
+acceptance and the editor then refusing to reopen it; an enquiry turned into a priced draft once
+rather than twice under a repeated idempotency key, with the enquirer's own words carried into
+the scope; the send dialog stating up front whether email can go out; the status endpoint never
+returning the provider key; the email settings tab refusing an unsendable test address; and an
+unauthenticated send being rejected.
+
 ### Documents
 
 Generated against the live database and inspected as images, not just byte counts:
@@ -78,12 +96,29 @@ Generated against the live database and inspected as images, not just byte count
 | Invoice DOCX | Valid zip, 20 parts, logo embedded, total GHC 19,830.00 |
 | Report PDF | All 6 numbered sections, cost table, FULLY PAID status, GHC 2,800.00 |
 | Report DOCX | Valid zip, 20 parts, matches the template structure |
+| Proposal PDF | 2 pages, letterhead, prepared-for block, phased scope table, totals box, optional extras listed separately, dual signature block, total GHC 76,700.00 |
+| Proposal DOCX | Valid zip, 141 KB, same figures and section grouping |
 
 ### QR codes
 
 All six generated artefacts (3 code themes, 3 wallpaper themes) decode successfully under **both**
 jsQR and OpenCV. See `docs/ARCHITECTURE.md` section 7 for the three defects this testing exposed
 and how each was fixed.
+
+### Email
+
+All seven outbound messages were rendered from live records, written to disk and inspected as
+images, not only checked for a non-empty string. `npm run verify:email` reproduces it and sends
+nothing. Each is asserted to be a complete HTML document carrying the company name, to have a
+plain text alternative, to contain no unresolved placeholder and no em or en dash, and the
+proposal message is asserted to quote the same total the database stores.
+
+Two defects were found this way and fixed:
+
+- The footer address read "Kanda, Accra, Ghana, Accra, Ghana", because the city and country were
+  appended to address lines that already contained them.
+- The proposal message quoted only the total, with no mention of the optional extras that sit
+  beside it on the attached PDF. It now quotes both, clearly separated.
 
 ### Other checks
 
@@ -139,6 +174,18 @@ These were real, and are listed because they are the useful part of a build reco
 14. **Service page titles read "… | MerSam | MerSam".** The seeded SEO title carried a brand
     suffix that the layout template already appends.
 
+### Found while building proposals and email
+
+19. **The default proposal opening lowercased the title.** "Thank you for the opportunity to quote
+    for borehole and treatment plant for ridge residences" reads as a mistake to a client, because
+    the title carries proper nouns. The opening no longer folds it into a sentence.
+20. **Signature rules on the proposal PDF sat at different heights.** The two cells are only the
+    same height when both carry a job title. Each is now a fixed-height box, so the rules line up
+    whether or not a role is set.
+21. **Every line item in the proposal editor shared a label.** "Title", "Quantity" and "Unit
+    price" repeated down the form, so nothing identified which line a field belonged to for a
+    screen reader, and nothing could address one in a test. Each now carries its line number.
+
 ### Found after the second sign-off, from a report of the splash hanging
 
 15. **The splash screen hung permanently on first load.** React runs effects twice in development.
@@ -187,5 +234,9 @@ These were real, and are listed because they are the useful part of a build reco
 4. Replace the seeded stock photography through Media and Services. Current images are from
    Unsplash under a licence that permits commercial use without attribution, and each was
    inspected before being listed, but your own photographs of your own work will serve better.
-5. Review the seeded copy. It was written to sound like the business and is accurate to the
+5. Email stays off until `RESEND_API_KEY` and `EMAIL_FROM` are set, the sending domain is
+   verified with Resend, and the box is ticked under Settings, Email. Send a test from that tab
+   before relying on it. Until then nothing breaks: documents are downloaded and sent by hand,
+   and the dashboard says so.
+6. Review the seeded copy. It was written to sound like the business and is accurate to the
    services described, but figures such as "340 boreholes delivered" are placeholders.

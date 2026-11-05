@@ -278,6 +278,24 @@ export const settingsSchema = z
     seoDescription: trimmed(600).default(''),
     seoKeywords: z.array(z.string().trim().max(60)).max(30).default([]),
     ogImageUrl: trimmed(1000).nullish(),
+
+    emailEnabled: z.boolean().default(false),
+    emailFromName: trimmed(160).nullish(),
+    emailFromAddress: z
+      .string()
+      .trim()
+      .email('Enter a valid sender address')
+      .nullish()
+      .or(z.literal('')),
+    emailReplyTo: z
+      .string()
+      .trim()
+      .email('Enter a valid reply address')
+      .nullish()
+      .or(z.literal('')),
+    emailBcc: z.string().trim().email('Enter a valid address').nullish().or(z.literal('')),
+    emailSignature: trimmed(2000).nullish(),
+    sendEnquiryConfirmation: z.boolean().default(true),
   })
   .partial();
 

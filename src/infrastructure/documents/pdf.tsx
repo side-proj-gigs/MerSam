@@ -2,7 +2,8 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import React from 'react';
 import { Document, Font, Image, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
-import type { InvoiceRecord, SiteSettings, WorkReport } from '@core/entities';
+import type { InvoiceRecord, Proposal, SiteSettings, WorkReport } from '@core/entities';
+import { calculateProposalTotals } from '@core/entities';
 import { Money } from '@core/value-objects/money';
 
 /**
@@ -556,6 +557,282 @@ export function WorkReportPdf({
         </View>
 
         <PageFooter settings={settings} reference={`Report ${report.reportNumber}`} />
+      </Page>
+    </Document>
+  );
+}
+
+
+/* -------------------------------------------------------------- proposal */
+
+/**
+ * A proposal reads as a letter first and a price list second, which is the
+ * order a client reads it in. The salutation, the opening and the closing
+ * frame a scope table that is grouped by section when the office has used
+ * sections, and optional items are listed apart from the headline figure so
+ * that adding one stays a decision rather than a surprise.
+ */
+export function ProposalPdf({
+  proposal,
+  settings,
+}: {
+  proposal: Proposal;
+  settings: SiteSettings;
+}) {
+  registerFonts();
+  const money = (minor: number) => Money.fromMinor(minor, proposal.currency).formatPlain();
+
+  const totals = calculateProposalTotals({
+    items: proposal.items,
+    currency: proposal.currency,
+    discountKind: proposal.discountKind,
+    discountValue: proposal.discountValue,
+    vatRate: proposal.vatRate,
+  });
+
+  const included = proposal.items.filter((item) => !item.isOptional);
+  const optional = proposal.items.filter((item) => item.isOptional);
+
+  // Items keep their given order; a section heading is printed the first time
+  // it appears, so the office controls grouping purely through the ordering.
+  const rows: { kind: 'section' | 'item'; key: string; value: string; item?: (typeof included)[number] }[] = [];
+  let currentSection: string | null = null;
+  included.forEach((item, index) => {
+    if (item.section && item.section !== currentSection) {
+      currentSection = item.section;
+      rows.push({ kind: 'section', key: `s-${index}`, value: item.section });
+    }
+    rows.push({ kind: 'item', key: item.id, value: item.title, item });
+  });
+
+  const paragraphsOf = (value: string) =>
+    value
+      .split(/\n{2,}/)
+      .map((block) => block.trim())
+      .filter(Boolean);
+
+  return (
+    <Document
+      title={`Proposal ${proposal.proposalNumber}`}
+      author={settings.companyName}
+      subject={`${proposal.title} for ${proposal.clientName}`}
+    >
+      <Page size="A4" style={styles.page}>
+        <Letterhead settings={settings} title="PROPOSAL" subtitle={proposal.proposalNumber} />
+
+        <View style={styles.metaRow}>
+          <View style={{ flexGrow: 2, flexBasis: 0 }}>
+            <Text style={styles.metaLabel}>Prepared for</Text>
+            <Text style={[styles.metaValue, { fontSize: 11 }]}>
+              {proposal.clientCompany || proposal.clientName}
+            </Text>
+            {proposal.clientCompany && <Text style={styles.metaText}>{proposal.clientName}</Text>}
+            {proposal.clientAddress && <Text style={styles.metaText}>{proposal.clientAddress}</Text>}
+            {proposal.clientPhone && <Text style={styles.metaText}>{proposal.clientPhone}</Text>}
+            {proposal.clientEmail && <Text style={styles.metaText}>{proposal.clientEmail}</Text>}
+          </View>
+          <View style={styles.metaBlock}>
+            <Text style={styles.metaLabel}>Date</Text>
+            <Text style={styles.metaValue}>{longDate(proposal.issuedOn)}</Text>
+          </View>
+          <View style={styles.metaBlock}>
+            <Text style={styles.metaLabel}>Valid until</Text>
+            <Text style={styles.metaValue}>
+              {proposal.validUntil ? longDate(proposal.validUntil) : 'On request'}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.thinRule} />
+
+        <Text style={{ fontSize: 15, lineHeight: 1.25, fontWeight: 'bold', marginBottom: 10 }}>
+          {proposal.title}
+        </Text>
+
+        <Text style={[styles.body, { marginBottom: 8 }]}>{proposal.salutation},</Text>
+        {paragraphsOf(proposal.introduction).map((block, index) => (
+          <Text key={index} style={styles.body}>
+            {block}
+          </Text>
+        ))}
+
+        {proposal.scopeIntro.trim().length > 0 && (
+          <>
+            <Text style={styles.sectionHeading}>Scope of works</Text>
+            {paragraphsOf(proposal.scopeIntro).map((block, index) => (
+              <Text key={index} style={styles.body}>
+                {block}
+              </Text>
+            ))}
+          </>
+        )}
+
+        <View style={{ marginTop: 10 }}>
+          <View style={styles.tableHead} fixed>
+            <Text style={[styles.th, styles.colDesc]}>Item</Text>
+            <Text style={[styles.th, styles.colQty]}>Qty</Text>
+            <Text style={[styles.th, styles.colPrice]}>Unit price</Text>
+            <Text style={[styles.th, styles.colTotal]}>Amount GHC</Text>
+          </View>
+
+          {rows.map((row, index) =>
+            row.kind === 'section' ? (
+              <View key={row.key} style={[styles.tr, { backgroundColor: GOLD_LIGHT }]} wrap={false}>
+                <Text style={[styles.td, { fontWeight: 'bold', fontSize: 8 }]}>
+                  {row.value.toUpperCase()}
+                </Text>
+              </View>
+            ) : (
+              <View
+                key={row.key}
+                style={[styles.tr, index % 2 === 1 ? styles.trAlt : {}]}
+                wrap={false}
+              >
+                <View style={styles.colDesc}>
+                  <Text style={[styles.td, { fontWeight: 'bold' }]}>{row.item!.title}</Text>
+                  {row.item!.description.length > 0 && (
+                    <Text style={[styles.td, { color: MUTED, fontSize: 7.8 }]}>
+                      {row.item!.description}
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.td, styles.colQty]}>
+                  {Number.isInteger(row.item!.quantity)
+                    ? row.item!.quantity
+                    : row.item!.quantity.toFixed(2)}
+                </Text>
+                <Text style={[styles.td, styles.colPrice]}>{money(row.item!.unitPriceMinor)}</Text>
+                <Text style={[styles.td, styles.colTotal, { fontWeight: 'bold' }]}>
+                  {money(row.item!.lineTotalMinor)}
+                </Text>
+              </View>
+            ),
+          )}
+        </View>
+
+        <View style={styles.footerRow} wrap={false}>
+          <View style={styles.termsBox}>
+            <Text style={styles.boxTitle}>Payment terms</Text>
+            {proposal.paymentTerms
+              .split('\n')
+              .filter(Boolean)
+              .map((line, index) => (
+                <Text key={index} style={styles.termsLine}>
+                  {line}
+                </Text>
+              ))}
+
+            <Text style={[styles.boxTitle, { marginTop: 9 }]}>Terms and conditions</Text>
+            {proposal.termsText
+              .split('\n')
+              .filter(Boolean)
+              .map((line, index) => (
+                <Text key={index} style={styles.termsLine}>
+                  {line}
+                </Text>
+              ))}
+          </View>
+
+          <View style={styles.totalsBox}>
+            <View style={styles.totalRow}>
+              <Text style={styles.totalLabel}>Sub-total</Text>
+              <Text style={styles.totalValue}>{money(totals.subtotal.minorUnits)}</Text>
+            </View>
+
+            {!totals.discount.isZero() && (
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>
+                  Discount
+                  {proposal.discountKind === 'percentage' ? ` (${proposal.discountValue}%)` : ''}
+                </Text>
+                <Text style={styles.totalValue}>-{money(totals.discount.minorUnits)}</Text>
+              </View>
+            )}
+
+            {!totals.vat.isZero() && (
+              <View style={styles.totalRow}>
+                <Text style={styles.totalLabel}>VAT ({proposal.vatRate}%)</Text>
+                <Text style={styles.totalValue}>{money(totals.vat.minorUnits)}</Text>
+              </View>
+            )}
+
+            <View style={styles.grandRow}>
+              <Text style={styles.grandLabel}>TOTAL</Text>
+              <Text style={styles.grandValue}>
+                {proposal.currency} {money(totals.total.minorUnits)}
+              </Text>
+            </View>
+
+            {optional.length > 0 && (
+              <Text style={[styles.termsLine, { marginTop: 6, textAlign: 'right' }]}>
+                Optional extras below are not included in this total.
+              </Text>
+            )}
+          </View>
+        </View>
+
+        {optional.length > 0 && (
+          <View wrap={false}>
+            <Text style={styles.sectionHeading}>Optional extras</Text>
+            <View style={styles.tableHead}>
+              <Text style={[styles.th, styles.colDesc]}>Item</Text>
+              <Text style={[styles.th, styles.colTotal]}>Amount GHC</Text>
+            </View>
+            {optional.map((item, index) => (
+              <View key={item.id} style={[styles.tr, index % 2 === 1 ? styles.trAlt : {}]}>
+                <View style={styles.colDesc}>
+                  <Text style={[styles.td, { fontWeight: 'bold' }]}>{item.title}</Text>
+                  {item.description.length > 0 && (
+                    <Text style={[styles.td, { color: MUTED, fontSize: 7.8 }]}>
+                      {item.description}
+                    </Text>
+                  )}
+                </View>
+                <Text style={[styles.td, styles.colTotal, { fontWeight: 'bold' }]}>
+                  {money(item.lineTotalMinor)}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {paragraphsOf(proposal.closing).length > 0 && (
+          <View style={{ marginTop: 16 }} wrap={false}>
+            {paragraphsOf(proposal.closing).map((block, index) => (
+              <Text key={index} style={styles.body}>
+                {block}
+              </Text>
+            ))}
+          </View>
+        )}
+
+        <View style={styles.signRow} wrap={false}>
+          <View style={styles.signCell}>
+            {/* Fixed height so both signature rules land on the same line,
+                whether or not a job title is set. */}
+            <View style={{ height: 30 }}>
+              <Text style={styles.signLabel}>Prepared by</Text>
+              <Text style={[styles.metaValue, { marginBottom: 1 }]}>{proposal.preparedBy}</Text>
+              {proposal.preparedByRole && (
+                <Text style={styles.signLabel}>{proposal.preparedByRole}</Text>
+              )}
+            </View>
+            <View style={[styles.signLine, { marginTop: 14 }]} />
+            <Text style={styles.signLabel}>Signature</Text>
+          </View>
+          <View style={styles.signCell}>
+            <View style={{ height: 30 }}>
+              <Text style={styles.signLabel}>Accepted for and on behalf of</Text>
+              <Text style={[styles.metaValue, { marginBottom: 1 }]}>
+                {proposal.clientCompany || proposal.clientName}
+              </Text>
+            </View>
+            <View style={[styles.signLine, { marginTop: 14 }]} />
+            <Text style={styles.signLabel}>Signature and date</Text>
+          </View>
+        </View>
+
+        <PageFooter settings={settings} reference={`Proposal ${proposal.proposalNumber}`} />
       </Page>
     </Document>
   );

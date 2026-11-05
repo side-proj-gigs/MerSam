@@ -11,6 +11,7 @@ import {
   createTestimonialRepository,
 } from './content';
 import { createClientRepository, createJobRepository, createLeadRepository } from './crm';
+import { createEmailLogRepository, createProposalRepository } from './proposals';
 import {
   createInvoiceRepository,
   createPaymentRepository,
@@ -38,6 +39,8 @@ export function createRepositories(handle: Database): Repositories {
     workReports: createWorkReportRepository(handle),
     users: createUserRepository(handle),
     audit: createAuditLogRepository(handle),
+    proposals: createProposalRepository(handle),
+    emailLog: createEmailLogRepository(handle),
   };
 }
 

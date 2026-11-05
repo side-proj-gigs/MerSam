@@ -51,6 +51,21 @@ export const env = {
     publicBaseUrl: optional('S3_PUBLIC_BASE_URL'),
   },
 
+  /**
+   * Outbound email. Entirely optional: with no API key the application still
+   * runs and simply reports that nothing can be sent. The key never goes near
+   * the database, so a dump cannot leak the ability to send as the company.
+   */
+  email: {
+    apiKey: optional('RESEND_API_KEY'),
+    from: optional('EMAIL_FROM'),
+    fromName: optional('EMAIL_FROM_NAME'),
+    replyTo: optional('EMAIL_REPLY_TO'),
+    get configured() {
+      return Boolean(this.apiKey && this.from);
+    },
+  },
+
   seed: {
     adminEmail: optional('ADMIN_EMAIL', 'admin@mersam.com'),
     adminPassword: optional('ADMIN_PASSWORD', 'ChangeMe!2026'),

@@ -17,7 +17,8 @@ import {
   WidthType,
   type IBorderOptions,
 } from 'docx';
-import type { InvoiceRecord, SiteSettings, WorkReport } from '@core/entities';
+import type { InvoiceRecord, Proposal, SiteSettings, WorkReport } from '@core/entities';
+import { calculateProposalTotals } from '@core/entities';
 import { Money } from '@core/value-objects/money';
 
 const GOLD = '8A671C';
@@ -570,6 +571,346 @@ export async function buildWorkReportDocx(
                     shading: ROW_TINT,
                   }),
                   cell([text(longDate(report.reportDate), { size: 9 })], { width: 60 }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      },
+    ],
+  });
+
+  return Buffer.from(await Packer.toBuffer(document));
+}
+
+
+/* -------------------------------------------------------------- proposal */
+
+/**
+ * The Word version of a proposal. It carries the same letter and the same
+ * figures as the PDF, built from real tables so the office can edit a line
+ * before sending rather than asking for a regenerated file.
+ */
+export async function buildProposalDocx(
+  proposal: Proposal,
+  settings: SiteSettings,
+): Promise<Buffer> {
+  const money = (minor: number) => Money.fromMinor(minor, proposal.currency).formatPlain();
+
+  const totals = calculateProposalTotals({
+    items: proposal.items,
+    currency: proposal.currency,
+    discountKind: proposal.discountKind,
+    discountValue: proposal.discountValue,
+    vatRate: proposal.vatRate,
+  });
+
+  const included = proposal.items.filter((item) => !item.isOptional);
+  const optional = proposal.items.filter((item) => item.isOptional);
+
+  const body = (content: string, size = 9.5) =>
+    content
+      .split('\n')
+      .filter(Boolean)
+      .map((line) => text(line, { size, color: '2C3542', spacingAfter: 100 }));
+
+  const scopeRows: TableRow[] = [];
+  let currentSection: string | null = null;
+
+  included.forEach((item, index) => {
+    if (item.section && item.section !== currentSection) {
+      currentSection = item.section;
+      scopeRows.push(
+        new TableRow({
+          children: [
+            cell([text(currentSection.toUpperCase(), { bold: true, size: 8, color: GOLD })], {
+              width: 100,
+              shading: GOLD_TINT,
+            }),
+          ],
+        }),
+      );
+    }
+
+    scopeRows.push(
+      new TableRow({
+        children: [
+          cell(
+            [
+              text(item.title, { bold: true, size: 9 }),
+              ...(item.description
+                ? [text(item.description, { size: 8, color: MUTED, spacingAfter: 0 })]
+                : []),
+            ],
+            { width: 55, shading: index % 2 === 1 ? ROW_TINT : undefined },
+          ),
+          cell(
+            [
+              text(
+                Number.isInteger(item.quantity) ? String(item.quantity) : item.quantity.toFixed(2),
+                { size: 9, align: AlignmentType.RIGHT },
+              ),
+            ],
+            { width: 10, shading: index % 2 === 1 ? ROW_TINT : undefined },
+          ),
+          cell([text(money(item.unitPriceMinor), { size: 9, align: AlignmentType.RIGHT })], {
+            width: 17,
+            shading: index % 2 === 1 ? ROW_TINT : undefined,
+          }),
+          cell(
+            [text(money(item.lineTotalMinor), { size: 9, bold: true, align: AlignmentType.RIGHT })],
+            { width: 18, shading: index % 2 === 1 ? ROW_TINT : undefined },
+          ),
+        ],
+      }),
+    );
+  });
+
+  const totalRow = (heading: string, value: string, options: { bold?: boolean; tint?: boolean } = {}) =>
+    new TableRow({
+      children: [
+        cell([text(heading, { size: 9, bold: options.bold, color: options.bold ? INK : MUTED })], {
+          width: 60,
+          shading: options.tint ? GOLD_TINT : undefined,
+        }),
+        cell(
+          [
+            text(value, {
+              size: options.bold ? 11 : 9,
+              bold: true,
+              align: AlignmentType.RIGHT,
+              color: options.tint ? GOLD : INK,
+            }),
+          ],
+          { width: 40, shading: options.tint ? GOLD_TINT : undefined },
+        ),
+      ],
+    });
+
+  const document = new Document({
+    creator: settings.companyName,
+    title: `Proposal ${proposal.proposalNumber}`,
+    description: `${proposal.title} for ${proposal.clientName}`,
+    sections: [
+      {
+        properties: { page: PAGE },
+        footers: { default: documentFooter(settings) },
+        children: [
+          ...letterhead(settings, 'PROPOSAL', proposal.proposalNumber),
+
+          new Table({
+            width: FULL_WIDTH,
+            rows: [
+              new TableRow({
+                children: [
+                  cell([text('Prepared for', { bold: true, size: 9 })], { width: 30, shading: ROW_TINT }),
+                  cell(
+                    [
+                      text(proposal.clientCompany || proposal.clientName, { size: 9, bold: true }),
+                      ...(proposal.clientCompany ? [text(proposal.clientName, { size: 8.5, color: MUTED })] : []),
+                      ...(proposal.clientAddress ? [text(proposal.clientAddress, { size: 8.5, color: MUTED })] : []),
+                      ...(proposal.clientEmail ? [text(proposal.clientEmail, { size: 8.5, color: MUTED })] : []),
+                    ],
+                    { width: 70 },
+                  ),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  cell([text('Date', { bold: true, size: 9 })], { width: 30, shading: ROW_TINT }),
+                  cell([text(longDate(proposal.issuedOn), { size: 9 })], { width: 70 }),
+                ],
+              }),
+              new TableRow({
+                children: [
+                  cell([text('Valid until', { bold: true, size: 9 })], { width: 30, shading: ROW_TINT }),
+                  cell(
+                    [
+                      text(proposal.validUntil ? longDate(proposal.validUntil) : 'On request', {
+                        size: 9,
+                      }),
+                    ],
+                    { width: 70 },
+                  ),
+                ],
+              }),
+            ],
+          }),
+
+          new Paragraph({ spacing: { after: 220 }, children: [] }),
+
+          text(proposal.title, { bold: true, size: 15, spacingAfter: 160 }),
+          text(`${proposal.salutation},`, { size: 9.5, spacingAfter: 120 }),
+          ...body(proposal.introduction),
+
+          ...(proposal.scopeIntro.trim()
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 240, after: 90 },
+                  children: [
+                    new TextRun({ text: 'Scope of works', bold: true, size: 22, color: INK, font: 'Calibri' }),
+                  ],
+                }),
+                ...body(proposal.scopeIntro),
+              ]
+            : []),
+
+          new Paragraph({ spacing: { after: 120 }, children: [] }),
+
+          new Table({
+            width: FULL_WIDTH,
+            rows: [
+              new TableRow({
+                tableHeader: true,
+                children: [
+                  headerCell('Item'),
+                  headerCell('Qty', AlignmentType.RIGHT),
+                  headerCell('Unit price', AlignmentType.RIGHT),
+                  headerCell(`Amount ${proposal.currency}`, AlignmentType.RIGHT),
+                ],
+              }),
+              ...scopeRows,
+            ],
+          }),
+
+          new Paragraph({ spacing: { after: 220 }, children: [] }),
+
+          new Table({
+            width: { size: 52, type: WidthType.PERCENTAGE },
+            alignment: AlignmentType.RIGHT,
+            rows: [
+              totalRow('Sub-total', money(totals.subtotal.minorUnits)),
+              ...(totals.discount.isZero()
+                ? []
+                : [totalRow('Discount', `-${money(totals.discount.minorUnits)}`)]),
+              ...(totals.vat.isZero()
+                ? []
+                : [totalRow(`VAT (${proposal.vatRate}%)`, money(totals.vat.minorUnits))]),
+              totalRow('TOTAL', `${proposal.currency} ${money(totals.total.minorUnits)}`, {
+                bold: true,
+                tint: true,
+              }),
+            ],
+          }),
+
+          ...(optional.length > 0
+            ? [
+                new Paragraph({
+                  heading: HeadingLevel.HEADING_2,
+                  spacing: { before: 280, after: 90 },
+                  children: [
+                    new TextRun({
+                      text: 'Optional extras',
+                      bold: true,
+                      size: 22,
+                      color: INK,
+                      font: 'Calibri',
+                    }),
+                  ],
+                }),
+                text('These are priced separately and are not included in the total above.', {
+                  size: 8.5,
+                  color: MUTED,
+                  spacingAfter: 120,
+                }),
+                new Table({
+                  width: FULL_WIDTH,
+                  rows: [
+                    new TableRow({
+                      tableHeader: true,
+                      children: [
+                        headerCell('Item'),
+                        headerCell(`Amount ${proposal.currency}`, AlignmentType.RIGHT),
+                      ],
+                    }),
+                    ...optional.map(
+                      (item, index) =>
+                        new TableRow({
+                          children: [
+                            cell(
+                              [
+                                text(item.title, { bold: true, size: 9 }),
+                                ...(item.description
+                                  ? [text(item.description, { size: 8, color: MUTED, spacingAfter: 0 })]
+                                  : []),
+                              ],
+                              { width: 75, shading: index % 2 === 1 ? ROW_TINT : undefined },
+                            ),
+                            cell(
+                              [
+                                text(money(item.lineTotalMinor), {
+                                  size: 9,
+                                  bold: true,
+                                  align: AlignmentType.RIGHT,
+                                }),
+                              ],
+                              { width: 25, shading: index % 2 === 1 ? ROW_TINT : undefined },
+                            ),
+                          ],
+                        }),
+                    ),
+                  ],
+                }),
+              ]
+            : []),
+
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 280, after: 90 },
+            children: [
+              new TextRun({ text: 'Payment terms', bold: true, size: 22, color: INK, font: 'Calibri' }),
+            ],
+          }),
+          ...body(proposal.paymentTerms, 9),
+
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            spacing: { before: 240, after: 90 },
+            children: [
+              new TextRun({
+                text: 'Terms and conditions',
+                bold: true,
+                size: 22,
+                color: INK,
+                font: 'Calibri',
+              }),
+            ],
+          }),
+          ...body(proposal.termsText, 9),
+
+          ...(proposal.closing.trim()
+            ? [new Paragraph({ spacing: { before: 240 }, children: [] }), ...body(proposal.closing)]
+            : []),
+
+          new Paragraph({ spacing: { after: 320 }, children: [] }),
+
+          new Table({
+            width: FULL_WIDTH,
+            rows: [
+              new TableRow({
+                children: [
+                  cell(
+                    [
+                      text('Prepared by', { size: 7.5, color: MUTED }),
+                      text(proposal.preparedBy, { bold: true, size: 9.5 }),
+                      ...(proposal.preparedByRole
+                        ? [text(proposal.preparedByRole, { size: 8, color: MUTED })]
+                        : []),
+                      new Paragraph({ spacing: { after: 280 }, children: [] }),
+                      text('Signature', { size: 7.5, color: MUTED }),
+                    ],
+                    { width: 50 },
+                  ),
+                  cell(
+                    [
+                      text('Accepted for and on behalf of', { size: 7.5, color: MUTED }),
+                      text(proposal.clientCompany || proposal.clientName, { bold: true, size: 9.5 }),
+                      new Paragraph({ spacing: { after: 280 }, children: [] }),
+                      text('Signature and date', { size: 7.5, color: MUTED }),
+                    ],
+                    { width: 50 },
+                  ),
                 ],
               }),
             ],

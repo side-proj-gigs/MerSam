@@ -31,6 +31,14 @@ async function main() {
     select 'work_reports', count(*)::int from work_reports
       where introduction like ${'%' + DASH + '%'} or work_performed like ${'%' + DASH + '%'}
          or appreciation like ${'%' + DASH + '%'}
+    union all
+    select 'proposals', count(*)::int from proposals
+      where introduction like ${'%' + DASH + '%'} or scope_intro like ${'%' + DASH + '%'}
+         or closing like ${'%' + DASH + '%'} or terms_text like ${'%' + DASH + '%'}
+         or payment_terms like ${'%' + DASH + '%'}
+    union all
+    select 'proposal_items', count(*)::int from proposal_items
+      where title like ${'%' + DASH + '%'} or description like ${'%' + DASH + '%'}
   `);
 
   const rows = (result.rows ?? result) as { source: string; hits: number }[];

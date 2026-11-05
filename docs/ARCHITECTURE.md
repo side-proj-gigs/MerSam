@@ -141,7 +141,7 @@ real.
 
 ## 6. Documents
 
-Invoices and work reports generate as both PDF and Word from the same stored record.
+Invoices, work reports and proposals generate as both PDF and Word from the same stored record.
 
 **PDF** uses `@react-pdf/renderer`. Two things are worth knowing:
 
@@ -156,6 +156,12 @@ office can edit the result.
 
 Both reproduce the layout of the paper documents the company already uses, including the numbered
 sections of the completion report and the `GHC` column headings on the invoice.
+
+The proposal is a letter rather than a form, so it renders differently: letterhead, a prepared-for
+block, a salutation, the opening, a scope table whose rows group under gold section headings, the
+totals box, then the optional extras in a table of their own, the closing, and a dual signature
+block. The two signature cells are fixed-height boxes, because without that the rules sit at
+different heights whenever one party has a job title and the other does not.
 
 ---
 
@@ -190,7 +196,57 @@ contrast a camera needs in poor light.
 
 ---
 
-## 8. Storage
+## 8. Email
+
+Email is a port, `EmailSender`, with one implementation, Resend. What matters about it is not the
+provider but the stance: **sending is optional and may fail, and neither may ever take down the
+work it accompanies.**
+
+Three rules follow from that, all enforced in one function, `dispatch` in
+`application/use-cases/email.ts`:
+
+1. **A sender that cannot send says so instead of throwing.** No API key, no verified sender
+   address, a malformed recipient: each returns a `skipped` outcome carrying a sentence a person
+   can act on, and the dashboard shows that sentence before anyone composes a message rather than
+   after they press send.
+2. **A provider failure is an outcome, not an exception.** Raising an invoice and emailing it are
+   two different things. If Resend is having a bad day, the invoice is still raised and the
+   office is told the message did not go.
+3. **Every attempt is logged, whatever happened.** `email_log` records sent, failed and skipped
+   alike, with the entity it belonged to. That is what lets a detail page say when a document
+   last reached someone, and what makes a complaint of "we never got it" answerable.
+
+The office is blind copied on everything, so there is an internal record independent of the log.
+Attachments are rendered through a second port, `DocumentRenderer`, so the use case that emails an
+invoice knows nothing about how a PDF is made.
+
+The contact form follows the same stance. The lead is saved first; the confirmation to the sender
+and the alert to the office go out afterwards through `Promise.allSettled`, so a mail outage
+cannot turn a successful submission into an error on a visitor's screen.
+
+---
+
+## 9. Proposals
+
+A proposal is a letter with a priced scope attached: narrative fields carry the letter, items
+carry the table. The money behaves exactly as it does on an invoice, so `calculateProposalTotals`
+delegates to `calculateTotals` rather than growing a second copy of the arithmetic.
+
+The one rule that is genuinely its own is the **optional extra**. An item marked optional is
+quoted to the client but excluded from the headline figure, and therefore from the discount and
+the VAT as well. It is returned separately as `totals.optional` so the editor, the detail page,
+the PDF and the email can all show the same thing: one price, with extras named beside it. Unit
+tests pin this down from both directions, including the case where every line is optional and the
+total is correctly zero.
+
+Status is partly derived rather than stored: a `sent` proposal whose validity has passed reads as
+`expired` without anything needing to run on a schedule. A decided proposal, accepted or declined,
+is never re-derived and can no longer be edited, because at that point it is a record of what was
+agreed rather than a draft. Accepting one closes the enquiry it came from as won.
+
+---
+
+## 10. Storage
 
 `FileStorage` is a port with two implementations: Neon's S3-compatible object storage, and
 Postgres `bytea` as a fallback when no bucket is configured.
@@ -202,7 +258,7 @@ immutable cache header so the work happens once per edge location.
 
 ---
 
-## 9. Front end
+## 11. Front end
 
 **Design tokens.** Colour is defined once as semantic tokens on `:root` and redefined for dark
 mode. Dark mode is a selected set of values, not an automatic inversion.
@@ -226,13 +282,16 @@ has finished loading.
 
 ---
 
-## 10. Known limits
+## 12. Known limits
 
 - The in-process content cache is per instance. On several instances a write invalidates only the
   one that served it; the rest catch up within the five minute TTL. Acceptable for content that
   changes a few times a day. Move it to Redis if that stops being true.
 - Hero slides and headline figures are stored as structured JSON and are not yet editable through
   a form. Everything else on the public site is.
-- The notifier writes to the log. The port exists so an email or SMS adapter can be added without
-  touching the use case.
+- Email is sent in the request that asks for it. A message with a large attachment therefore
+  holds the request open for a second or two. A queue would be better under volume; at the volume
+  this office works at, it would be machinery without a purpose.
+- There is no inbound email. A client reply goes to the reply-to address and is read in a normal
+  mailbox, not in the dashboard.
 - Invoice line reordering is by sort order, set on save. There is no drag handle yet.

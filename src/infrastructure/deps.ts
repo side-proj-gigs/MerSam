@@ -4,6 +4,8 @@ import type { ContentDeps } from '@app-layer/use-cases/content';
 import type { DashboardDeps } from '@app-layer/use-cases/dashboard';
 import type { InvoiceDeps } from '@app-layer/use-cases/invoices';
 import type { LeadDeps } from '@app-layer/use-cases/leads';
+import type { EmailDeps } from '@app-layer/use-cases/email';
+import type { ProposalDeps } from '@app-layer/use-cases/proposals';
 import type { StaffCardDeps } from '@app-layer/use-cases/staff-cards';
 import type { WorkReportDeps } from '@app-layer/use-cases/work-reports';
 import { env } from './config/env';
@@ -99,4 +101,30 @@ export function repositories() {
 export function staffCardDeps(): StaffCardDeps {
   const { repos } = getContainer();
   return { users: repos.users, settings: repos.settings, audit: repos.audit };
+}
+
+export function proposalDeps(): ProposalDeps {
+  const { repos, clock, ids } = getContainer();
+  return {
+    proposals: repos.proposals,
+    leads: repos.leads,
+    settings: repos.settings,
+    audit: repos.audit,
+    clock,
+    ids,
+  };
+}
+
+export function emailDeps(): EmailDeps {
+  const { repos, emailSender, documents } = getContainer();
+  return {
+    sender: emailSender,
+    log: repos.emailLog,
+    settings: repos.settings,
+    documents,
+    invoices: repos.invoices,
+    workReports: repos.workReports,
+    proposals: repos.proposals,
+    audit: repos.audit,
+  };
 }

@@ -3,7 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { Ban, FileDown, FileText, Pencil, Send, Wallet } from 'lucide-react';
+import { Ban, FileDown, FileText, Mail, Pencil, Send, Wallet } from 'lucide-react';
 import { toast } from 'sonner';
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type InvoiceRecord, type PaymentMethod } from '@core/entities';
 import { api } from '@/lib/api-client';
@@ -12,11 +12,19 @@ import { Button, ButtonLink } from '@/components/ui/button';
 import { Input, Textarea } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
 import { Dialog } from '@/components/ui/primitives';
+import { SendEmailDialog } from '@/components/admin/send-email-dialog';
 
-export function InvoiceActions({ invoice }: { invoice: InvoiceRecord }) {
+export function InvoiceActions({
+  invoice,
+  lastSentAt,
+}: {
+  invoice: InvoiceRecord;
+  lastSentAt?: Date | string | null;
+}) {
   const router = useRouter();
   const [paying, setPaying] = useState(false);
   const [voiding, setVoiding] = useState(false);
+  const [emailing, setEmailing] = useState(false);
 
   const send = useMutation({
     mutationFn: () => api.post(`/api/admin/invoices/${invoice.id}/send`, {}, { idempotent: false }),
@@ -64,6 +72,17 @@ export function InvoiceActions({ invoice }: { invoice: InvoiceRecord }) {
           </Button>
         )}
 
+        {invoice.status !== 'void' && (
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => setEmailing(true)}
+            leadingIcon={<Mail className="size-4" aria-hidden />}
+          >
+            Email
+          </Button>
+        )}
+
         {editable && (
           <ButtonLink
             href={`/admin/invoices/${invoice.id}/edit`}
@@ -100,6 +119,18 @@ export function InvoiceActions({ invoice }: { invoice: InvoiceRecord }) {
 
       {paying && <PaymentDialog invoice={invoice} onClose={() => setPaying(false)} />}
       {voiding && <VoidDialog invoice={invoice} onClose={() => setVoiding(false)} />}
+
+      {emailing && (
+        <SendEmailDialog
+          endpoint={`/api/admin/invoices/${invoice.id}/email`}
+          documentLabel="Invoice"
+          reference={invoice.invoiceNumber}
+          defaultTo={invoice.customerEmail}
+          attachmentName={`Invoice-${invoice.invoiceNumber.replace(/\//g, '-')}.pdf`}
+          lastSentAt={lastSentAt}
+          onClose={() => setEmailing(false)}
+        />
+      )}
     </>
   );
 }
