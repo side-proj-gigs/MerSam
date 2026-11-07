@@ -1,9 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { InvariantViolation } from '@core/errors';
 import type { FileStorage, StoredFile } from '@app-layer/ports';
 import { env } from '../config/env';
-import { assertUploadAllowed } from './index';
+import { assertUploadAllowed } from '@core/entities';
 
 const EXTENSIONS: Record<string, string> = {
   'image/jpeg': 'jpg',
@@ -49,6 +55,34 @@ function buildKey(folder: string, filename: string, mimeType: string): string {
       .toLowerCase() || 'file';
   const extension = EXTENSIONS[mimeType] ?? 'bin';
   return `${safeFolder}/${stem}-${randomUUID().slice(0, 8)}.${extension}`;
+}
+
+/**
+ * Whether this driver can actually be used, as a sentence explaining why not.
+ *
+ * Checked once at startup rather than trusted, because a bucket that has been
+ * deleted or a key that has been rotated looks exactly like a working
+ * configuration until the first upload fails.
+ */
+export async function s3Unavailable(): Promise<string | null> {
+  const { endpoint, accessKeyId, secretAccessKey, bucket } = env.storage;
+  if (!endpoint) return 'S3_ENDPOINT is not set';
+  if (!bucket) return 'S3_BUCKET is not set';
+  if (!accessKeyId || !secretAccessKey) return 'S3 credentials are not set';
+
+  try {
+    await s3().send(new HeadBucketCommand({ Bucket: bucket }));
+    return null;
+  } catch (error) {
+    const name = (error as { name?: string }).name;
+    if (name === 'NoSuchBucket' || name === 'NotFound') {
+      return `the bucket "${bucket}" does not exist at ${endpoint}`;
+    }
+    if (name === 'Forbidden' || name === 'AccessDenied' || name === 'InvalidAccessKeyId') {
+      return `the credentials are not accepted for the bucket "${bucket}"`;
+    }
+    return `${name ?? 'the bucket'} could not be reached: ${(error as Error).message}`;
+  }
 }
 
 export const s3Storage: FileStorage = {

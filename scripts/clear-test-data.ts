@@ -1,10 +1,12 @@
 import 'dotenv/config';
-import { inArray } from 'drizzle-orm';
 import { db, pool } from '../src/infrastructure/db/client';
+import { inArray, like, or } from 'drizzle-orm';
 import {
   idempotencyKeys,
   invoices,
   leads,
+  mediaAssets,
+  mediaBlobs,
   proposals,
   rateLimitBuckets,
   workReports,
@@ -38,6 +40,21 @@ async function main() {
     .where(inArray(invoices.customerName, TEST_CUSTOMERS))
     .returning({ id: invoices.id });
 
+  // Uploads the media spec leaves behind if it fails part way through.
+  // Migration 0001 dropped the foreign key, so the bytes do not follow the
+  // row automatically and have to be removed by their storage key.
+  const removedMedia = await db
+    .delete(mediaAssets)
+    .where(or(like(mediaAssets.altText, 'e2e upload %'), like(mediaAssets.altText, 'e2e large %')))
+    .returning({ id: mediaAssets.id, storageKey: mediaAssets.storageKey });
+
+  const orphanedBlobs = removedMedia
+    .map((asset) => asset.storageKey)
+    .filter((key): key is string => Boolean(key));
+  if (orphanedBlobs.length > 0) {
+    await db.delete(mediaBlobs).where(inArray(mediaBlobs.id, orphanedBlobs));
+  }
+
   // Proposals go before leads: one points at the other.
   const removedProposals = await db
     .delete(proposals)
@@ -51,7 +68,8 @@ async function main() {
 
   console.log(
     `removed  reports=${removedReports.length}  invoices=${removedInvoices.length}` +
-      `  proposals=${removedProposals.length}  leads=${removedLeads.length}`,
+      `  proposals=${removedProposals.length}  leads=${removedLeads.length}` +
+      `  media=${removedMedia.length}`,
   );
 
   await db.delete(rateLimitBuckets);

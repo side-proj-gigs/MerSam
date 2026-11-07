@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { NotFoundError } from '@core/errors';
 import { repositories } from '@infra/deps';
-import { resolveStorage } from '@infra/storage';
+import { removeStoredFile } from '@infra/storage';
 import { noContent, ok, route } from '@/presentation/http/respond';
 import { requirePrincipal } from '@/presentation/http/session';
 import { uuidSchema } from '@/presentation/validation/schemas';
@@ -36,8 +36,7 @@ export const DELETE = route(async (_request: Request, context: Context) => {
   await repos.media.delete(id);
 
   if (asset.storageKey) {
-    const storage = await resolveStorage();
-    await storage.remove(asset.storageKey).catch((error) => {
+    await removeStoredFile(asset.storageKey).catch((error) => {
       console.error('Failed to remove stored object', asset.storageKey, error);
     });
   }

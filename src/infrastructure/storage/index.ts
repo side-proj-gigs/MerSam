@@ -1,32 +1,19 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
-import { ValidationError } from '@core/errors';
+import { assertUploadAllowed, isPostgresStorageKey } from '@core/entities';
 import type { FileStorage, StoredFile } from '@app-layer/ports';
 import { env } from '../config/env';
 import { db } from '../db/client';
 import { mediaBlobs } from '../db/schema';
 
-export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
-
-export const ALLOWED_UPLOAD_TYPES = [
-  'image/jpeg',
-  'image/png',
-  'image/webp',
-  'image/avif',
-  'image/gif',
-  'image/svg+xml',
-  'application/pdf',
-] as const;
-
-export function assertUploadAllowed(mimeType: string, byteSize: number): void {
-  if (!ALLOWED_UPLOAD_TYPES.includes(mimeType as (typeof ALLOWED_UPLOAD_TYPES)[number])) {
-    throw new ValidationError(`Files of type ${mimeType} cannot be uploaded`);
-  }
-  if (byteSize <= 0) throw new ValidationError('The uploaded file is empty');
-  if (byteSize > MAX_UPLOAD_BYTES) {
-    throw new ValidationError(`Files must stay under ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024)}MB`);
-  }
-}
+// The upload rules live in the domain. Re-exported here so callers that
+// think of them as part of storage keep working.
+export {
+  ALLOWED_UPLOAD_TYPES,
+  MAX_UPLOAD_BYTES,
+  assertUploadAllowed,
+  probeImageSize,
+} from '@core/entities';
 
 /**
  * Keeps bytes in Neon alongside everything else. Used when no object store is
@@ -59,50 +46,111 @@ export const postgresStorage: FileStorage = {
   },
 };
 
-/** Reads the intrinsic size out of the header bytes, without an image library. */
-export function probeImageSize(
-  data: Buffer,
-  mimeType: string,
-): { width: number; height: number } | null {
-  try {
-    if (mimeType === 'image/png' && data.length > 24) {
-      return { width: data.readUInt32BE(16), height: data.readUInt32BE(20) };
-    }
-    if (mimeType === 'image/gif' && data.length > 10) {
-      return { width: data.readUInt16LE(6), height: data.readUInt16LE(8) };
-    }
-    if (mimeType === 'image/jpeg') {
-      let offset = 2;
-      while (offset < data.length - 9) {
-        if (data[offset] !== 0xff) {
-          offset += 1;
-          continue;
-        }
-        const marker = data[offset + 1]!;
-        // SOF0 through SOF15, skipping the markers that are not frame headers.
-        if (marker >= 0xc0 && marker <= 0xcf && ![0xc4, 0xc8, 0xcc].includes(marker)) {
-          return { height: data.readUInt16BE(offset + 5), width: data.readUInt16BE(offset + 7) };
-        }
-        offset += 2 + data.readUInt16BE(offset + 2);
-      }
-    }
-  } catch {
-    return null;
-  }
-  return null;
+/**
+ * Which store a key belongs to, read from the key itself.
+ *
+ * Without this, an asset uploaded while S3 was healthy becomes unreadable
+ * the moment the driver falls back, which is exactly when it matters most
+ * that the site keeps rendering its images.
+ */
+export function storageForKey(key: string): FileStorage | null {
+  return isPostgresStorageKey(key) ? postgresStorage : null;
 }
 
 /**
- * Chooses the driver once. If S3 is selected but misconfigured we fall back to
- * Postgres rather than leaving the admin unable to upload anything at all.
+ * Decided once per process, then cached.
+ *
+ * The previous version wrapped only the dynamic import, which all but never
+ * throws. A missing bucket or a bad key fails much later, inside `save`, so
+ * the fallback this function promised never actually ran and a dead bucket
+ * surfaced as "something went wrong on our side" on every single upload. That
+ * is what happened in production: the Neon bucket was gone and nothing said
+ * so.
+ *
+ * The driver is now asked whether it can really reach its bucket before it is
+ * handed out. Postgres is always there to fall back to, so the admin can
+ * always upload something, even on a day the object store cannot be reached.
  */
-export async function resolveStorage(): Promise<FileStorage> {
+let resolved: Promise<FileStorage> | null = null;
+
+async function chooseStorage(): Promise<FileStorage> {
   if (env.storage.driver !== 's3') return postgresStorage;
+
   try {
-    const { s3Storage } = await import('./s3');
-    return s3Storage;
+    const { s3Storage, s3Unavailable } = await import('./s3');
+    const reason = await s3Unavailable();
+    if (!reason) return s3Storage;
+
+    console.error(`[storage] S3 is selected but not usable (${reason}). Falling back to Postgres.`);
+    return postgresStorage;
   } catch (error) {
-    console.error('S3 storage unavailable, falling back to Postgres', error);
+    console.error('[storage] S3 driver could not be loaded, falling back to Postgres', error);
     return postgresStorage;
   }
+}
+
+export async function resolveStorage(): Promise<FileStorage> {
+  resolved ??= chooseStorage();
+  return resolved;
+}
+
+/**
+ * Reads a stored file, asking the store that key belongs to rather than
+ * whichever driver happens to be configured now.
+ */
+export async function readStoredFile(
+  key: string,
+): Promise<{ data: Buffer; mimeType: string } | null> {
+  const byKey = storageForKey(key);
+  if (byKey) return byKey.read(key);
+
+  const storage = await resolveStorage();
+  // The key belongs to an object store. If we have fallen back to Postgres
+  // there is nothing to read, and saying so beats a confusing empty response.
+  if (storage === postgresStorage) return null;
+  return storage.read(key);
+}
+
+/**
+ * What the storage layer actually settled on, for the readiness probe.
+ *
+ * Worth reporting because the failure this exists to describe, a bucket that
+ * has quietly stopped existing, is invisible from the outside until somebody
+ * tries to upload something.
+ */
+export async function storageStatus(): Promise<{
+  configured: 'local' | 's3';
+  active: 'postgres' | 's3';
+  degraded: boolean;
+  reason: string | null;
+}> {
+  if (env.storage.driver !== 's3') {
+    return { configured: 'local', active: 'postgres', degraded: false, reason: null };
+  }
+
+  const { s3Unavailable } = await import('./s3');
+  const reason = await s3Unavailable();
+
+  return {
+    configured: 's3',
+    active: reason ? 'postgres' : 's3',
+    degraded: Boolean(reason),
+    reason,
+  };
+}
+
+/** Removes a stored file from the store its key belongs to. */
+export async function removeStoredFile(key: string): Promise<void> {
+  const byKey = storageForKey(key);
+  if (byKey) return byKey.remove(key);
+
+  const storage = await resolveStorage();
+  // Nothing to remove if the object store this key belongs to is unreachable.
+  if (storage === postgresStorage) return;
+  return storage.remove(key);
+}
+
+/** Only used by tests, which need each case to start from a clean decision. */
+export function resetStorageChoice(): void {
+  resolved = null;
 }

@@ -30,7 +30,7 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 | `AUTH_SECRET` | yes | Signs session tokens. 32 characters or more in production |
 | `SESSION_TTL_HOURS` | no | Session lifetime, default 12 |
 | `NEXT_PUBLIC_SITE_URL` | yes in production | Absolute site address. **Staff card QR codes encode this**, so a wrong value produces codes that point at the wrong host |
-| `STORAGE_DRIVER` | no | `s3` for Neon object storage, `local` to keep uploads in Postgres |
+| `STORAGE_DRIVER` | no | `local` (the default) keeps uploads in Postgres, `s3` uses an object store. An unreachable bucket falls back to Postgres rather than failing uploads |
 | `S3_*` | if `STORAGE_DRIVER=s3` | Endpoint, bucket, region and credentials |
 | `RESEND_API_KEY` | no | Enables outbound email. Left blank, the dashboard says so plainly and every document is still downloadable |
 | `EMAIL_FROM` | if sending | Sender address. Must be on a domain verified with Resend |
@@ -142,8 +142,8 @@ Full detail, including the non-obvious decisions and the bugs found while testin
 ## Testing
 
 ```bash
-npm test          # 85 unit tests
-npm run test:e2e  # 66 end-to-end tests, desktop and phone
+npm test          # 97 unit tests
+npm run test:e2e  # 70 end-to-end tests, desktop and phone
 ```
 
 The unit tests cover the money arithmetic, invoice, proposal and report totals, status
@@ -173,6 +173,13 @@ does not scan is worse than no code at all.
   is left as shipped, and requires `AUTH_SECRET` to be at least 32 characters.
 - Uploaded media is served through `/api/media/<id>/raw` rather than straight from the bucket, so
   the storage driver can change without breaking a single stored URL.
+- **Uploads are capped at 4MB, because a serverless request body on Vercel is capped at 4.5MB.**
+  Anything larger is answered by the platform with its own 413 before the application sees it, so
+  the cap sits below that and oversized photographs are shrunk in the browser before they are
+  sent. Raising `MAX_UPLOAD_BYTES` without moving off a serverless host puts uploads back in the
+  hole they were in: accepted by the form, refused by the platform, explained by nobody.
+- `GET /api/health` reports which store uploads are actually going to, and says why if the
+  configured one is unreachable. Check it first when an upload misbehaves in production.
 - Neon suspends idle compute, which closes pooled connections. The pool handles that: it logs the
   dropped client and retries connection-level failures, so a suspend is invisible rather than an
   error. `npx tsx scripts/verify-db-recovery.ts` demonstrates it against your own database.

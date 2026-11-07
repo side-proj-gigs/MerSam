@@ -248,13 +248,50 @@ agreed rather than a draft. Accepting one closes the enquiry it came from as won
 
 ## 10. Storage
 
-`FileStorage` is a port with two implementations: Neon's S3-compatible object storage, and
-Postgres `bytea` as a fallback when no bucket is configured.
+`FileStorage` is a port with two implementations: an S3-compatible object store, and Postgres
+`bytea`, which is the default and the fallback.
 
 Uploads are served through `/api/media/<id>/raw` rather than straight from the bucket. That costs
 a hop and buys three things: the storage driver can change without rewriting a single stored URL,
 nothing needs to be made publicly readable at the bucket level, and the response can carry an
 immutable cache header so the work happens once per edge location.
+
+### The fallback has to be real
+
+The first version of `resolveStorage` wrapped the dynamic `import('./s3')` in a try and called
+that a fallback. It was not one. Importing a module practically never throws; a missing bucket or
+a rotated key fails much later, inside `save`, where nothing was catching it. So a configuration
+that looked healthy produced "something went wrong on our side" on every upload and said nothing
+about why.
+
+That is not hypothetical. The Neon bucket the deployment pointed at had stopped existing, and the
+only symptom anybody could see was that uploading media did not work.
+
+The driver is now asked whether it can actually reach its bucket, once per process, before it is
+handed out. If it cannot, the reason is logged as a sentence and Postgres takes over, so the
+office can always upload something. `GET /api/health` reports the same thing, because a bucket
+that has quietly stopped existing is invisible from outside until somebody tries to use it.
+
+### A key names its own store
+
+Falling back raises a second problem: an asset uploaded while S3 was healthy must stay readable
+afterwards. Reads and deletes therefore route on the shape of the key rather than on whatever is
+configured now. A Postgres key is a bare UUID; an object store key always carries a folder and an
+extension. `isPostgresStorageKey` lives in the domain, next to the upload rules, because it is a
+fact about the data rather than about any driver.
+
+### The limit belongs to the platform, not to taste
+
+Uploads are capped at 4MB. The number is not an opinion: a serverless request body on Vercel
+cannot exceed 4.5MB, and the platform answers anything larger with a plain text 413 before the
+function runs. The application had been advertising 8MB, so every photograph between the two was
+accepted by the form and rejected by the platform, with the client unable even to parse the reply
+to say why.
+
+The cap now sits below the platform's, the client reads a 413 as the specific thing it is, and an
+oversized image is downscaled in the browser rather than refused: the longest edge is capped at
+2400px and an opaque PNG is re-encoded as JPEG, which is what lets a 12MB screenshot through. A
+file that genuinely cannot be shrunk is refused with its size and the limit, not with a shrug.
 
 ---
 

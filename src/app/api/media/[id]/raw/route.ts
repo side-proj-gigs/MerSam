@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { NotFoundError } from '@core/errors';
 import { repositories } from '@infra/deps';
-import { resolveStorage } from '@infra/storage';
+import { readStoredFile } from '@infra/storage';
 import { route } from '@/presentation/http/respond';
 import { uuidSchema } from '@/presentation/validation/schemas';
 
@@ -26,8 +26,9 @@ export const GET = route(async (_request: Request, context: { params: Promise<{ 
     return NextResponse.redirect(asset.url, 308);
   }
 
-  const storage = await resolveStorage();
-  const file = await storage.read(asset.storageKey);
+  // Asked of the store the key belongs to, so media uploaded under one driver
+  // stays readable after the configuration changes underneath it.
+  const file = await readStoredFile(asset.storageKey);
   if (!file) throw new NotFoundError('Media file', id);
 
   return new NextResponse(new Uint8Array(file.data), {

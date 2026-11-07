@@ -13,7 +13,116 @@ import { Input } from '@/components/ui/field';
 import { Card, Dialog, EmptyState, Pagination, Skeleton } from '@/components/ui/primitives';
 import { PageHeader } from '@/components/admin/shell';
 
-const MAX_BYTES = 8 * 1024 * 1024;
+/**
+ * Kept in step with MAX_UPLOAD_BYTES on the server, which in turn sits under
+ * the 4.5MB a serverless request body may carry. A larger picture is not
+ * refused, it is shrunk first.
+ */
+const MAX_BYTES = 4 * 1024 * 1024;
+
+/** Above this, a photograph is bigger than any layout on the site needs. */
+const MAX_DIMENSION = 2400;
+
+/** Tried in turn until the result fits, so a stubborn file still gets in. */
+const FALLBACK_DIMENSIONS = [MAX_DIMENSION, 1800, 1400, 1100];
+
+const RESIZABLE = ['image/jpeg', 'image/png', 'image/webp'];
+
+function loadImage(url: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const element = new window.Image();
+    element.onload = () => resolve(element);
+    element.onerror = () => reject(new Error('That file could not be read as an image'));
+    element.src = url;
+  });
+}
+
+function drawToCanvas(image: HTMLImageElement, longestEdge: number): HTMLCanvasElement | null {
+  const scale = Math.min(1, longestEdge / Math.max(image.width, image.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.width * scale));
+  canvas.height = Math.max(1, Math.round(image.height * scale));
+
+  const context = canvas.getContext('2d');
+  if (!context) return null;
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+/**
+ * Whether any pixel is actually see-through.
+ *
+ * A PNG is often just a photograph or a screenshot with no transparency at
+ * all, and those re-encode to a fraction of the size as JPEG. Checking costs
+ * one pass over a sample of the pixels and is what lets a 12MB screenshot
+ * through instead of refusing it.
+ */
+function hasTransparency(canvas: HTMLCanvasElement): boolean {
+  const context = canvas.getContext('2d');
+  if (!context) return true;
+  try {
+    const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+    // Every 40th pixel: enough to catch a transparent region, cheap to scan.
+    for (let i = 3; i < data.length; i += 4 * 40) {
+      if (data[i]! < 255) return true;
+    }
+    return false;
+  } catch {
+    // If the pixels cannot be read, assume transparency and keep PNG.
+    return true;
+  }
+}
+
+const toBlob = (canvas: HTMLCanvasElement, type: string, quality?: number) =>
+  new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, quality));
+
+/**
+ * Shrinks an oversized image in the browser before it is sent.
+ *
+ * A picture straight off a phone is routinely 5 to 10MB, which the platform
+ * refuses outright, and is far larger than anything this site displays.
+ * Rather than making that the person's problem, the longest edge is capped
+ * and the encoding stepped down until it fits.
+ *
+ * Returns the original when it already fits, and null only when it genuinely
+ * cannot be brought under the limit.
+ */
+async function downscaleImage(file: File): Promise<File | null> {
+  if (file.size <= MAX_BYTES) return file;
+  if (!RESIZABLE.includes(file.type)) return null;
+
+  const url = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(url);
+
+    for (const dimension of FALLBACK_DIMENSIONS) {
+      const canvas = drawToCanvas(image, dimension);
+      if (!canvas) return null;
+
+      // JPEG unless a transparent pixel would be lost by flattening it.
+      const keepAlpha = file.type !== 'image/jpeg' && hasTransparency(canvas);
+      const type = keepAlpha ? 'image/png' : 'image/jpeg';
+      // PNG ignores the quality argument, so there is one attempt per size.
+      const qualities = keepAlpha ? [undefined] : [0.86, 0.72, 0.6, 0.45];
+
+      for (const quality of qualities) {
+        const blob = await toBlob(canvas, type, quality);
+        if (blob && blob.size <= MAX_BYTES) {
+          const stem = file.name.replace(/\.[^.]+$/, '');
+          return new File([blob], `${stem}.${keepAlpha ? 'png' : 'jpg'}`, { type });
+        }
+      }
+    }
+
+    return null;
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)}MB`;
 
 interface MediaPage extends Page<MediaAsset> {
   folders: string[];
@@ -48,16 +157,25 @@ export default function MediaPage() {
     setUploading(true);
 
     let succeeded = 0;
-    for (const file of Array.from(files)) {
-      if (file.size > MAX_BYTES) {
-        toast.error(`${file.name} is larger than 8MB`);
+    for (const original of Array.from(files)) {
+      const file = await downscaleImage(original);
+      if (!file) {
+        toast.error(`${original.name} is ${megabytes(original.size)}`, {
+          description: `Files must be under ${megabytes(MAX_BYTES)}, and this one could not be shrunk automatically. Save it smaller and try again.`,
+          duration: 8000,
+        });
         continue;
+      }
+      if (file !== original) {
+        toast.message(`${original.name} was resized to fit`, {
+          description: `${megabytes(original.size)} down to ${megabytes(file.size)}. The site never displays it larger than this.`,
+        });
       }
 
       const body = new FormData();
       body.set('file', file);
       body.set('folder', folder || 'general');
-      body.set('altText', file.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '));
+      body.set('altText', original.name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' '));
 
       try {
         // Multipart goes through fetch directly: the browser has to set the
@@ -65,12 +183,29 @@ export default function MediaPage() {
         const response = await fetch('/api/admin/media', { method: 'POST', body });
         if (response.ok) {
           succeeded += 1;
-        } else {
-          const payload = await response.json().catch(() => null);
-          toast.error(payload?.error?.message ?? `Could not upload ${file.name}`);
+          continue;
         }
+
+        // A body the platform refuses never reaches our code, so the reply is
+        // plain text rather than the usual envelope. Saying "could not upload"
+        // to that leaves nobody any the wiser.
+        if (response.status === 413) {
+          toast.error(`${original.name} is too large for the server to accept`, {
+            description: `The limit is ${megabytes(MAX_BYTES)} per file.`,
+            duration: 8000,
+          });
+          continue;
+        }
+
+        const payload = await response.json().catch(() => null);
+        toast.error(payload?.error?.message ?? `Could not upload ${original.name}`, {
+          description: payload ? undefined : `The server answered ${response.status}.`,
+          duration: 8000,
+        });
       } catch {
-        toast.error(`Could not upload ${file.name}`);
+        toast.error(`Could not upload ${original.name}`, {
+          description: 'The request did not reach the server. Check your connection.',
+        });
       }
     }
 

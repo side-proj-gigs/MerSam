@@ -36,10 +36,11 @@ turnaround and its own statically generated page. All editable in the dashboard.
 
 Everything below was run, not assumed.
 
-### Unit tests: 85 passing
+### Unit tests: 97 passing
 
 ```
 tests/unit/architecture.test.ts    5 tests
+tests/unit/storage.test.ts        12 tests
 tests/unit/money.test.ts           8 tests
 tests/unit/invoice.test.ts        16 tests
 tests/unit/proposal.test.ts       15 tests
@@ -65,7 +66,7 @@ Two assert against the company's real paperwork:
 - The Shola work report totals **GHC 2,800.00**, fully paid, zero outstanding, matching the signed
   report.
 
-### End-to-end tests: 66 passing
+### End-to-end tests: 70 passing
 
 Run against a production build on a desktop viewport and a Pixel 7.
 
@@ -85,6 +86,11 @@ rather than twice under a repeated idempotency key, with the enquirer's own word
 the scope; the send dialog stating up front whether email can go out; the status endpoint never
 returning the provider key; the email settings tab refusing an unsendable test address; and an
 unauthenticated send being rejected.
+
+Media adds: a file picked in the browser reaching the database and its exact bytes coming back
+out through the route the site links to, a file past the limit refused with its size and the
+limit rather than a shrug, an oversized photograph shrunk in the browser instead of refused, and
+the readiness probe naming the store uploads are going to.
 
 ### Documents
 
@@ -182,6 +188,21 @@ These were real, and are listed because they are the useful part of a build reco
 20. **Signature rules on the proposal PDF sat at different heights.** The two cells are only the
     same height when both carry a job title. Each is now a fixed-height box, so the rules line up
     whether or not a role is set.
+### Found in production, reported by the owner
+
+22. **Media upload was broken on the deployed site, and nothing said why.** Three faults in one
+    path. The object store bucket the deployment pointed at no longer existed, so every upload
+    threw. The fallback to Postgres that was supposed to cover exactly this wrapped only the
+    dynamic import, which never throws, so it had never once run: a dead bucket surfaced as a
+    generic 500. And the application advertised an 8MB limit on a platform that refuses any
+    request body over 4.5MB, so every ordinary phone photograph was rejected by the platform
+    before the application saw it, with the client unable to parse the plain text reply to
+    explain itself. The driver is now health checked before it is used, reads and deletes route
+    on the shape of the key so media survives a driver change, the cap sits under the platform's,
+    oversized images are downscaled in the browser, and `/api/health` reports which store is
+    actually in use. Upload had no end-to-end coverage at all, which is why it shipped; it has
+    four tests now.
+
 21. **Every line item in the proposal editor shared a label.** "Title", "Quantity" and "Unit
     price" repeated down the form, so nothing identified which line a field belonged to for a
     screen reader, and nothing could address one in a test. Each now carries its line number.

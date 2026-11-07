@@ -5,6 +5,7 @@ export * from './crm';
 export * from './invoice';
 export * from './finance';
 export * from './settings';
+export * from './media';
 export * from './proposal';
 export * from './email';
 export type { CurrencyCode } from '../value-objects/money';
