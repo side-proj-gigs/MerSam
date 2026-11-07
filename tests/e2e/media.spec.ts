@@ -115,6 +115,100 @@ test.describe('media library', () => {
     expect((await page.request.get(asset.url)).status()).toBe(404);
   });
 
+  test('a tile opens a viewer showing the whole file and what is known about it', async ({
+    page,
+  }) => {
+    await page.goto('/admin/media');
+
+    const name = `e2e-upload-${Date.now()}.png`;
+    // Not square, so "contain" can be told apart from the grid's "cover".
+    await page.setInputFiles('input[type=file]', {
+      name,
+      mimeType: 'image/png',
+      buffer: png(120, 60),
+    });
+    await expect(page.getByText(/1 file uploaded/i)).toBeVisible({ timeout: 30_000 });
+
+    const alt = name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+    await page.getByRole('button', { name: `View ${alt}` }).click();
+
+    const viewer = page.getByRole('dialog');
+    await expect(viewer).toBeVisible();
+    await expect(viewer.getByText('120 by 60 pixels')).toBeVisible();
+    await expect(viewer.getByText('image/png')).toBeVisible();
+    await expect(viewer.getByText('Uploaded')).toBeVisible();
+
+    // The point of the viewer: the actual bytes, drawn at their real size.
+    const image = viewer.getByRole('img', { name: alt });
+    await expect(image).toBeVisible();
+    await expect
+      .poll(() => image.evaluate((node: HTMLImageElement) => node.naturalWidth), {
+        timeout: 20_000,
+      })
+      .toBe(120);
+
+    await page.keyboard.press('Escape');
+    await expect(viewer).toBeHidden();
+
+    const listed = await page.request.get('/api/admin/media?page=1&pageSize=24');
+    const { data } = await listed.json();
+    const asset = data.items.find((item: { altText: string }) => item.altText === alt);
+    await page.request.delete(`/api/admin/media/${asset.id}`, { timeout: 60_000 });
+  });
+
+  test('deleting asks in the application, never in a browser dialog', async ({ page }) => {
+    // If anything still reaches for window.confirm, Playwright auto-dismisses
+    // it and this fires. Catching that is the whole point of the test.
+    const nativeDialogs: string[] = [];
+    page.on('dialog', (dialog) => {
+      nativeDialogs.push(dialog.message());
+      void dialog.dismiss();
+    });
+
+    await page.goto('/admin/media');
+
+    const name = `e2e-upload-${Date.now()}.png`;
+    await page.setInputFiles('input[type=file]', {
+      name,
+      mimeType: 'image/png',
+      buffer: png(40, 40),
+    });
+    await expect(page.getByText(/1 file uploaded/i)).toBeVisible({ timeout: 30_000 });
+
+    const alt = name.replace(/\.[^.]+$/, '').replace(/[-_]+/g, ' ');
+    await page.getByRole('figure').filter({ hasText: alt }).hover();
+    await page.getByRole('button', { name: `Delete ${alt}` }).click();
+
+    const confirmation = page.getByRole('dialog');
+    await expect(confirmation).toBeVisible();
+    await expect(confirmation.getByText(`Delete ${alt}?`)).toBeVisible();
+    // It says what will happen, which window.confirm never could.
+    await expect(confirmation.getByText(/removed from the library/i)).toBeVisible();
+    // The action is named, not "OK".
+    const confirmButton = confirmation.getByRole('button', { name: 'Delete file' });
+    await expect(confirmButton).toBeVisible();
+
+    // Cancelling leaves the file alone.
+    await confirmation.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirmation).toBeHidden();
+    await expect(page.getByRole('figure').filter({ hasText: alt })).toBeVisible();
+
+    // Escape is a cancel too, so a reflex keypress destroys nothing.
+    await page.getByRole('button', { name: `Delete ${alt}` }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(page.getByRole('dialog')).toBeHidden();
+    await expect(page.getByRole('figure').filter({ hasText: alt })).toBeVisible();
+
+    // Confirming does the deed.
+    await page.getByRole('button', { name: `Delete ${alt}` }).click();
+    await page.getByRole('button', { name: 'Delete file' }).click();
+    await expect(page.getByText('Removed')).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('figure').filter({ hasText: alt })).toHaveCount(0);
+
+    expect(nativeDialogs, 'no browser dialog should have been used').toEqual([]);
+  });
+
   test('a file past the limit is refused with a reason, not a shrug', async ({ page }) => {
     await page.goto('/admin/media');
 

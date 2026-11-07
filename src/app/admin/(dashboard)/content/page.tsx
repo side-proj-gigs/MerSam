@@ -10,6 +10,7 @@ import { cn, formatDate, newIdempotencyKey, toDateInput, truncate } from '@/lib/
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Textarea } from '@/components/ui/field';
 import { Badge, Dialog } from '@/components/ui/primitives';
+import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/admin/shell';
 import { DataTable, type Column } from '@/components/admin/data-table';
 
@@ -180,6 +181,7 @@ function TestimonialsTab() {
 }
 
 function TestimonialDialog({ item, onClose }: { item?: Testimonial; onClose: () => void }) {
+  const askConfirm = useConfirm();
   const { save, remove } = useResource('testimonials', 'testimonials', onClose);
   const [form, setForm] = useState({
     authorName: item?.authorName ?? '',
@@ -207,7 +209,15 @@ function TestimonialDialog({ item, onClose }: { item?: Testimonial; onClose: () 
               variant="ghost"
               className="mr-auto text-[var(--color-danger)]"
               loading={remove.isPending}
-              onClick={() => confirm('Delete this testimonial?') && remove.mutate(item.id)}
+              onClick={async () => {
+                const confirmed = await askConfirm({
+                  title: 'Delete this testimonial?',
+                  description: 'It stops appearing on the website immediately.',
+                  detail: `"${truncate(item.quote, 120)}"`,
+                  confirmLabel: 'Delete testimonial',
+                });
+                if (confirmed) remove.mutate(item.id);
+              }}
             >
               Delete
             </Button>
@@ -369,6 +379,7 @@ function ProjectsTab() {
 }
 
 function ProjectDialog({ item, onClose }: { item?: ProjectShowcase; onClose: () => void }) {
+  const askConfirm = useConfirm();
   const { save, remove } = useResource('projects', 'projects', onClose);
   const [form, setForm] = useState({
     title: item?.title ?? '',
@@ -399,7 +410,15 @@ function ProjectDialog({ item, onClose }: { item?: ProjectShowcase; onClose: () 
               variant="ghost"
               className="mr-auto text-[var(--color-danger)]"
               loading={remove.isPending}
-              onClick={() => confirm('Delete this project?') && remove.mutate(item.id)}
+              onClick={async () => {
+                const confirmed = await askConfirm({
+                  title: `Delete ${item.title}?`,
+                  description:
+                    'The project and its own page come off the website. The photographs stay in the media library.',
+                  confirmLabel: 'Delete project',
+                });
+                if (confirmed) remove.mutate(item.id);
+              }}
             >
               Delete
             </Button>
@@ -569,6 +588,7 @@ function FaqsTab() {
 }
 
 function FaqDialog({ item, onClose }: { item?: FaqEntry; onClose: () => void }) {
+  const askConfirm = useConfirm();
   const { save, remove } = useResource('faqs', 'faqs', onClose);
   const [form, setForm] = useState({
     question: item?.question ?? '',
@@ -594,7 +614,15 @@ function FaqDialog({ item, onClose }: { item?: FaqEntry; onClose: () => void }) 
               variant="ghost"
               className="mr-auto text-[var(--color-danger)]"
               loading={remove.isPending}
-              onClick={() => confirm('Delete this question?') && remove.mutate(item.id)}
+              onClick={async () => {
+                const confirmed = await askConfirm({
+                  title: 'Delete this question?',
+                  description: 'It is removed from the FAQ page on the website.',
+                  detail: item.question,
+                  confirmLabel: 'Delete question',
+                });
+                if (confirmed) remove.mutate(item.id);
+              }}
             >
               Delete
             </Button>

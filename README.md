@@ -71,7 +71,9 @@ Service and project pages are statically generated and revalidated every five mi
   recorded decision when the client answers
 - **Invoices**: line items, discounts, VAT, payments, PDF and Word export
 - **Work reports**: the numbered completion and payment report, PDF and Word export
-- **Services**, **Content** (testimonials, projects, FAQs), **Media**, **Settings**
+- **Media**: a library of photographs and documents. A tile opens a viewer showing the whole
+  file uncropped, with its dimensions, size and address, and arrow keys move through the page
+- **Services**, **Content** (testimonials, projects, FAQs), **Settings**
 - **Team**: accounts, roles and each person's digital business card
 
 ### Outbound email
@@ -142,16 +144,17 @@ Full detail, including the non-obvious decisions and the bugs found while testin
 ## Testing
 
 ```bash
-npm test          # 97 unit tests
-npm run test:e2e  # 70 end-to-end tests, desktop and phone
+npm test          # 98 unit tests
+npm run test:e2e  # 72 end-to-end tests, desktop and phone
 ```
 
 The unit tests cover the money arithmetic, invoice, proposal and report totals, status
 transitions, value objects, document numbering, vCard generation and the email dispatcher, which
 has to report a provider failure as an outcome rather than throw it at whoever raised the
 invoice. Two of them assert that the system reproduces
-the totals on the real signed invoice and work report the company already uses, and five enforce
-the Clean Architecture dependency rule so it cannot erode one convenient import at a time.
+the totals on the real signed invoice and work report the company already uses, and six enforce
+the Clean Architecture dependency rule, and the absence of browser dialogs, so neither can
+erode one convenient line at a time.
 
 The end-to-end tests run against a production build and cover the public pages, the enquiry form
 (including its idempotency and duplicate handling), sign in and its rate limiting, the full

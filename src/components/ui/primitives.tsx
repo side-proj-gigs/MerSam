@@ -198,7 +198,11 @@ export function Dialog({
 
     document.addEventListener('keydown', onKeyDown);
     const timer = setTimeout(() => {
-      panel.current?.querySelector<HTMLElement>('input, textarea, select, button')?.focus();
+      // A dialog may nominate where the keyboard should land. A destructive
+      // confirmation puts it on Cancel, so a stray Enter does nothing.
+      const nominated = panel.current?.querySelector<HTMLElement>('[data-autofocus]');
+      (nominated ?? panel.current?.querySelector<HTMLElement>('input, textarea, select, button'))
+        ?.focus();
     }, 50);
 
     return () => {

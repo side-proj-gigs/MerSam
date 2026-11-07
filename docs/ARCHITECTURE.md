@@ -280,6 +280,19 @@ configured now. A Postgres key is a bare UUID; an object store key always carrie
 extension. `isPostgresStorageKey` lives in the domain, next to the upload rules, because it is a
 fact about the data rather than about any driver.
 
+### Looking at a file
+
+The grid crops every tile to a square, which is right for a grid and useless for deciding whether
+a photograph is the one you meant. Clicking a tile opens the file uncropped at its real
+proportions, on a checkerboard so a transparent PNG reads as transparent, with its dimensions,
+size, folder and address beside it. Arrow keys move through the page without closing, which is
+how anybody hunting for one picture in a library expects to work, and a PDF is rendered inline
+rather than described, because "PDF" says nothing about which PDF it is.
+
+A row can outlive its bytes, which is exactly what the dead bucket did to this installation, so
+an image that fails to load says so and suggests what to do rather than leaving an empty frame
+that looks like it is still thinking.
+
 ### The limit belongs to the platform, not to taste
 
 Uploads are capped at 4MB. The number is not an opinion: a serverless request body on Vercel
@@ -312,6 +325,24 @@ One bug worth recording: a reveal that slides in horizontally starts the element
 which widens the document. Below the fold on a phone that showed up as the whole page scrolling
 sideways. Narrow screens now get the vertical reveal instead, swapped in CSS via a data attribute
 so there is nothing to hydrate.
+
+**Confirming is part of the product, not the browser.** `window.confirm` was the one control in
+the admin that nothing could style: system font, an "OK" button that names nothing, no room to
+say what is about to happen, and on a phone a grey slab from another decade. It also blocks the
+page, so the thing being deleted is hidden at the moment somebody is deciding about it.
+
+`ConfirmProvider` sits at the top of the admin and `useConfirm` returns a promise, so a call site
+still reads as one line:
+
+```tsx
+if (await askConfirm({ title: 'Delete this photograph?' })) remove.mutate(id);
+```
+
+What it buys over the original: the action is named, the consequence is a sentence, the subject is
+shown in a tinted panel, the keyboard lands on Cancel rather than on the destructive button, and
+Escape and the backdrop both mean cancel. The local is called `askConfirm` rather than `confirm`
+precisely so it does not shadow the global that is no longer allowed. An architecture test fails
+the build if `confirm`, `alert` or `prompt` is called anywhere under `src` again.
 
 **The splash screen cannot trap anyone.** It is `pointer-events: none`, shows once per session,
 respects reduced motion, and leaves after a hard ceiling regardless of whether a third-party image

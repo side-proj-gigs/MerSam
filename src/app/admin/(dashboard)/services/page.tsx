@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Textarea } from '@/components/ui/field';
 import { Select } from '@/components/ui/select';
 import { Badge, Dialog } from '@/components/ui/primitives';
+import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/admin/shell';
 import { DataTable, type Column } from '@/components/admin/data-table';
 
@@ -143,6 +144,7 @@ function ServiceDialog({
   onClose: () => void;
 }) {
   const queryClient = useQueryClient();
+  const askConfirm = useConfirm();
   const editing = Boolean(service);
   const [idempotencyKey] = useState(() => newIdempotencyKey('service'));
 
@@ -229,8 +231,15 @@ function ServiceDialog({
               variant="ghost"
               className="mr-auto text-[var(--color-danger)]"
               loading={remove.isPending}
-              onClick={() => {
-                if (confirm(`Remove ${service!.name} from the website?`)) remove.mutate();
+              onClick={async () => {
+                const confirmed = await askConfirm({
+                  title: `Remove ${service!.name}?`,
+                  description:
+                    'The service disappears from the website straight away, along with its own page.',
+                  detail: 'Enquiries already received about it are kept.',
+                  confirmLabel: 'Remove service',
+                });
+                if (confirmed) remove.mutate();
               }}
             >
               Delete

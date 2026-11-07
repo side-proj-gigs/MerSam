@@ -61,6 +61,34 @@ describe('architecture boundaries', () => {
     expect(roots).toHaveLength(1);
   });
 
+  it('nothing asks the browser to confirm, alert or prompt', () => {
+    // These are the only controls in the product that cannot be designed,
+    // cannot say what is about to happen, and name the action "OK". They were
+    // replaced by ConfirmProvider, and this is what keeps them gone: reaching
+    // for window.confirm is a one-line convenience that would otherwise creep
+    // back the next time somebody wants a quick guard.
+    const pattern = /(?<![\w.$])(?:window\s*\.\s*)?(confirm|alert|prompt)\s*\(/;
+    const posix = (file: string) => path.relative(SRC, file).split(path.sep).join('/');
+
+    const offending = filesUnder(SRC)
+      // The replacement itself is allowed to name what it replaces.
+      .filter((file) => posix(file) !== 'components/ui/confirm.tsx')
+      .flatMap((file) =>
+        readFileSync(file, 'utf8')
+          .split('\n')
+          .map((line, index) => ({ line: line.trim(), number: index + 1, file }))
+          // A call site, not a comment, a prop name or a type.
+          .filter((entry) => pattern.test(entry.line))
+          .filter((entry) => !entry.line.startsWith('*') && !entry.line.startsWith('//'))
+          .filter(
+            (entry) => !/\b(confirmLabel|confirmPassword|onConfirm|useConfirm)\b/.test(entry.line),
+          )
+          .map((entry) => `${posix(entry.file)}:${entry.number}`),
+      );
+
+    expect(offending).toEqual([]);
+  });
+
   it('route handlers reach the database only through the dependency builders', () => {
     const direct = filesUnder(path.join(SRC, 'app')).flatMap((file) =>
       importsIn(file)

@@ -30,6 +30,7 @@ import { api } from '@/lib/api-client';
 import { cn, initials } from '@/lib/utils';
 import { useScrollLock } from '@/hooks';
 import { Button } from '@/components/ui/button';
+import { ConfirmProvider } from '@/components/ui/confirm';
 import { ThemeToggle } from '@/components/site/theme-toggle';
 
 interface NavItem {
@@ -164,6 +165,7 @@ export function AdminShell({
   );
 
   return (
+    <ConfirmProvider>
     <div className="flex min-h-dvh bg-[var(--surface-sunken)]">
       <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 border-r border-ink-800 bg-ink-950 lg:block">
         {sidebar}
@@ -265,6 +267,7 @@ export function AdminShell({
         <main className="flex-1 px-4 py-6 lg:px-6 lg:py-8">{children}</main>
       </div>
     </div>
+    </ConfirmProvider>
   );
 }
 

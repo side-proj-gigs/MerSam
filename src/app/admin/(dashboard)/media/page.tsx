@@ -1,16 +1,29 @@
 'use client';
 
 import Image from 'next/image';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, Link2, Trash2, Upload } from 'lucide-react';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Download,
+  Expand,
+  ExternalLink,
+  FileText,
+  ImageOff,
+  Link2,
+  Trash2,
+  Upload,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import type { MediaAsset, Page } from '@core/entities';
 import { api } from '@/lib/api-client';
 import { cn, formatDate } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { Button, ButtonLink } from '@/components/ui/button';
 import { Input } from '@/components/ui/field';
-import { Card, Dialog, EmptyState, Pagination, Skeleton } from '@/components/ui/primitives';
+import { Badge, Card, Dialog, EmptyState, Pagination, Skeleton } from '@/components/ui/primitives';
+import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/admin/shell';
 
 /**
@@ -135,6 +148,10 @@ export default function MediaPage() {
   const [page, setPage] = useState(1);
   const [linking, setLinking] = useState(false);
   const [uploading, setUploading] = useState(false);
+  // Which tile is open in the viewer, held as an index so the arrows can move
+  // through the page without closing and reopening.
+  const [viewing, setViewing] = useState<number | null>(null);
+  const askConfirm = useConfirm();
 
   const { data, isPending } = useQuery({
     queryKey: ['media', page, folder],
@@ -147,6 +164,8 @@ export default function MediaPage() {
     mutationFn: (id: string) => api.delete(`/api/admin/media/${id}`),
     onSuccess: () => {
       toast.success('Removed');
+      // The viewer was showing the file that has just gone.
+      setViewing(null);
       void queryClient.invalidateQueries({ queryKey: ['media'] });
     },
     onError: (error: Error) => toast.error(error.message),
@@ -215,6 +234,26 @@ export default function MediaPage() {
       void queryClient.invalidateQueries({ queryKey: ['media'] });
     }
     if (fileInput.current) fileInput.current.value = '';
+  }
+
+  async function deleteAsset(asset: MediaAsset) {
+    const confirmed = await askConfirm({
+      title: `Delete ${asset.altText || 'this file'}?`,
+      description:
+        'The file is removed from the library and from anywhere on the website that points at it.',
+      detail: (
+        <span className="flex items-center gap-2">
+          <span className="font-mono text-xs">{asset.mimeType}</span>
+          {asset.width && asset.height && (
+            <span className="text-xs text-[var(--text-muted)]">
+              {asset.width} by {asset.height}
+            </span>
+          )}
+        </span>
+      ),
+      confirmLabel: 'Delete file',
+    });
+    if (confirmed) remove.mutate(asset.id);
   }
 
   async function copyUrl(asset: MediaAsset) {
@@ -316,44 +355,51 @@ export default function MediaPage() {
           />
         ) : (
           <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6">
-            {data.items.map((asset) => (
+            {data.items.map((asset, index) => (
               <figure
                 key={asset.id}
-                className="group relative overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)]"
+                className="group relative overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)] transition-shadow focus-within:ring-2 focus-within:ring-[var(--brand)] hover:shadow-[var(--shadow-float)]"
               >
                 <div className="relative aspect-square">
-                  {asset.mimeType.startsWith('image/') ? (
-                    <Image
-                      src={asset.url}
-                      alt={asset.altText}
-                      fill
-                      sizes="(min-width: 1024px) 16vw, 44vw"
-                      unoptimized={asset.source === 'upload'}
-                      className="object-cover"
-                    />
-                  ) : (
-                    <span className="grid size-full place-items-center text-xs text-[var(--text-muted)]">
-                      {asset.mimeType.split('/')[1]?.toUpperCase()}
-                    </span>
-                  )}
+                  {/* The whole tile opens the viewer. A button rather than a
+                      click handler on the figure, so it is reachable by
+                      keyboard and announced as the action it is. */}
+                  <button
+                    type="button"
+                    onClick={() => setViewing(index)}
+                    className="absolute inset-0 z-10 cursor-zoom-in outline-none"
+                    aria-label={`View ${asset.altText || 'this file'}`}
+                  />
 
-                  <div className="absolute inset-0 flex items-end justify-center gap-1.5 bg-ink-950/65 p-2 opacity-0 transition-opacity group-hover:opacity-100">
-                    <button
-                      type="button"
-                      onClick={() => copyUrl(asset)}
-                      className="grid size-8 place-items-center rounded-lg bg-white/15 text-white hover:bg-white/30"
-                      aria-label={`Copy the address of ${asset.altText || 'this file'}`}
-                    >
-                      <Copy className="size-3.5" aria-hidden />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => confirm('Remove this file?') && remove.mutate(asset.id)}
-                      className="grid size-8 place-items-center rounded-lg bg-white/15 text-white hover:bg-[var(--color-danger)]"
-                      aria-label={`Delete ${asset.altText || 'this file'}`}
-                    >
-                      <Trash2 className="size-3.5" aria-hidden />
-                    </button>
+                  <AssetThumbnail asset={asset} />
+
+                  {/* z-20 belongs on the overlay, not on the buttons inside it: the
+                      opacity transition makes this a stacking context, so a
+                      z-index set on a child is trapped within it and the
+                      full-tile View button below would swallow every click. */}
+                  <div className="pointer-events-none absolute inset-0 z-20 flex items-end justify-between gap-1.5 bg-gradient-to-t from-ink-950/80 via-ink-950/10 to-transparent p-2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+                    <span className="pointer-events-none grid size-8 place-items-center rounded-lg bg-white/15 text-white backdrop-blur-sm">
+                      <Expand className="size-3.5" aria-hidden />
+                    </span>
+
+                    <span className="pointer-events-auto flex gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => copyUrl(asset)}
+                        className="grid size-8 place-items-center rounded-lg bg-white/15 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+                        aria-label={`Copy the address of ${asset.altText || 'this file'}`}
+                      >
+                        <Copy className="size-3.5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteAsset(asset)}
+                        className="grid size-8 place-items-center rounded-lg bg-white/15 text-white backdrop-blur-sm transition-colors hover:bg-[var(--color-danger)]"
+                        aria-label={`Delete ${asset.altText || 'this file'}`}
+                      >
+                        <Trash2 className="size-3.5" aria-hidden />
+                      </button>
+                    </span>
                   </div>
                 </div>
 
@@ -382,8 +428,281 @@ export default function MediaPage() {
         )}
       </Card>
 
+      {viewing !== null && data?.items[viewing] && (
+        <AssetViewer
+          assets={data.items}
+          index={viewing}
+          onIndexChange={setViewing}
+          onClose={() => setViewing(null)}
+          onCopy={copyUrl}
+          onDelete={deleteAsset}
+          deleting={remove.isPending}
+        />
+      )}
+
       {linking && <LinkDialog folder={folder || 'general'} onClose={() => setLinking(false)} />}
     </>
+  );
+}
+
+const isImage = (asset: MediaAsset) => asset.mimeType.startsWith('image/');
+const isPdf = (asset: MediaAsset) => asset.mimeType === 'application/pdf';
+
+/** The square in the grid. Cropped to fill, because the grid is a grid. */
+function AssetThumbnail({ asset }: { asset: MediaAsset }) {
+  if (isImage(asset)) {
+    return (
+      <Image
+        src={asset.url}
+        alt={asset.altText}
+        fill
+        sizes="(min-width: 1024px) 16vw, 44vw"
+        unoptimized={asset.source === 'upload'}
+        className="object-cover"
+      />
+    );
+  }
+
+  return (
+    <span className="grid size-full place-items-center gap-1.5 text-[var(--text-muted)]">
+      <FileText className="size-7" aria-hidden />
+      <span className="text-[0.625rem] font-bold uppercase tracking-[0.1em]">
+        {asset.mimeType.split('/')[1]?.replace('+xml', '') ?? 'file'}
+      </span>
+    </span>
+  );
+}
+
+function Fact({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[0.625rem] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+        {label}
+      </dt>
+      <dd className="mt-0.5 break-words text-[var(--text-primary)]">{value}</dd>
+    </div>
+  );
+}
+
+/**
+ * The viewer. What the grid could never show: the whole picture, uncropped,
+ * at the size it was actually uploaded at, with everything known about it
+ * beside it.
+ *
+ * Arrow keys move through the page without closing, which is how anybody
+ * looking for one particular photograph in a library of them expects to
+ * work. A PDF is shown inline rather than described, because "PDF" tells you
+ * nothing about which PDF it is.
+ */
+function AssetViewer({
+  assets,
+  index,
+  onIndexChange,
+  onClose,
+  onCopy,
+  onDelete,
+  deleting,
+}: {
+  assets: MediaAsset[];
+  index: number;
+  onIndexChange: (next: number) => void;
+  onClose: () => void;
+  onCopy: (asset: MediaAsset) => void;
+  onDelete: (asset: MediaAsset) => void;
+  deleting: boolean;
+}) {
+  const asset = assets[index]!;
+  const hasPrevious = index > 0;
+  const hasNext = index < assets.length - 1;
+
+  // Reset the loading shimmer whenever a different file comes into view.
+  const [loaded, setLoaded] = useState(false);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setLoaded(false);
+    setFailed(false);
+  }, [asset.id]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'ArrowLeft' && hasPrevious) onIndexChange(index - 1);
+      if (event.key === 'ArrowRight' && hasNext) onIndexChange(index + 1);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [index, hasPrevious, hasNext, onIndexChange]);
+
+  const absolute =
+    asset.source === 'external'
+      ? asset.url
+      : typeof window === 'undefined'
+        ? asset.url
+        : `${window.location.origin}${asset.url}`;
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      size="xl"
+      title={asset.altText || 'Untitled file'}
+      description={`${index + 1} of ${assets.length} on this page`}
+      footer={
+        <>
+          <span className="mr-auto flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!hasPrevious}
+              onClick={() => onIndexChange(index - 1)}
+              aria-label="Previous file"
+            >
+              <ChevronLeft className="size-4" aria-hidden />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              disabled={!hasNext}
+              onClick={() => onIndexChange(index + 1)}
+              aria-label="Next file"
+            >
+              <ChevronRight className="size-4" aria-hidden />
+            </Button>
+          </span>
+
+          <Button
+            variant="ghost"
+            onClick={() => onDelete(asset)}
+            loading={deleting}
+            className="text-[var(--color-danger)]"
+            leadingIcon={<Trash2 className="size-4" aria-hidden />}
+          >
+            Delete
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => onCopy(asset)}
+            leadingIcon={<Copy className="size-4" aria-hidden />}
+          >
+            Copy address
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_16rem]">
+        <div className="relative flex min-h-[16rem] items-center justify-center overflow-hidden rounded-2xl border border-[var(--border-subtle)] bg-[var(--surface-sunken)]">
+          {/* A checkerboard, so a transparent PNG reads as transparent
+              rather than as white on white. */}
+          <span
+            aria-hidden
+            className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(45deg,var(--text-primary)_25%,transparent_25%),linear-gradient(-45deg,var(--text-primary)_25%,transparent_25%),linear-gradient(45deg,transparent_75%,var(--text-primary)_75%),linear-gradient(-45deg,transparent_75%,var(--text-primary)_75%)] [background-position:0_0,0_8px,8px_-8px,-8px_0] [background-size:16px_16px]"
+          />
+
+          {isImage(asset) && failed ? (
+            // A row can outlive its bytes, for instance when the object store
+            // it was uploaded to no longer exists. Saying so beats an empty
+            // frame that looks like the viewer is still thinking.
+            <span className="relative grid max-w-sm place-items-center gap-2 p-10 text-center">
+              <ImageOff className="size-9 text-[var(--text-muted)]" aria-hidden />
+              <span className="text-sm font-semibold text-[var(--text-primary)]">
+                This file cannot be displayed
+              </span>
+              <span className="text-xs text-[var(--text-secondary)]">
+                The record is still here but the stored file is not. It was most likely held in an
+                object store that is no longer reachable. Delete the entry and upload it again.
+              </span>
+            </span>
+          ) : isImage(asset) ? (
+            <>
+              {!loaded && <Skeleton className="absolute inset-4" />}
+              {/* Unoptimised and plain: this is the file itself, at full
+                  size, which is the entire point of opening it. */}
+              <img
+                key={asset.id}
+                src={asset.url}
+                alt={asset.altText}
+                onLoad={() => setLoaded(true)}
+                onError={() => setFailed(true)}
+                className={cn(
+                  'relative max-h-[60vh] w-auto max-w-full object-contain transition-opacity duration-300',
+                  loaded ? 'opacity-100' : 'opacity-0',
+                )}
+              />
+            </>
+          ) : isPdf(asset) ? (
+            <object
+              data={asset.url}
+              type="application/pdf"
+              className="relative h-[60vh] w-full"
+              aria-label={asset.altText || 'Document preview'}
+            >
+              <span className="grid h-full place-items-center p-6 text-center text-sm text-[var(--text-secondary)]">
+                This browser will not show the document inline. Open it in a new tab instead.
+              </span>
+            </object>
+          ) : (
+            <span className="relative grid place-items-center gap-2 p-10 text-[var(--text-muted)]">
+              <FileText className="size-10" aria-hidden />
+              <span className="text-sm">No preview for this type of file</span>
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <dl className="grid grid-cols-2 gap-3 text-sm lg:grid-cols-1">
+            <Fact
+              label="Type"
+              value={<span className="font-mono text-xs">{asset.mimeType}</span>}
+            />
+            {asset.width && asset.height ? (
+              <Fact label="Dimensions" value={`${asset.width} by ${asset.height} pixels`} />
+            ) : null}
+            {asset.byteSize > 0 && (
+              <Fact label="Size" value={`${(asset.byteSize / 1024).toFixed(0)} KB`} />
+            )}
+            <Fact label="Folder" value={asset.folder || 'general'} />
+            <Fact label="Added" value={formatDate(asset.createdAt, 'long')} />
+            <Fact
+              label="Source"
+              value={
+                <Badge tone={asset.source === 'upload' ? 'brand' : 'accent'}>
+                  {asset.source === 'upload' ? 'Uploaded' : 'Linked'}
+                </Badge>
+              }
+            />
+          </dl>
+
+          <div>
+            <p className="mb-1.5 text-[0.625rem] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)]">
+              Address
+            </p>
+            <p className="break-all rounded-lg bg-[var(--surface-sunken)] px-2.5 py-2 font-mono text-[0.6875rem] text-[var(--text-secondary)]">
+              {absolute}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <ButtonLink
+              href={asset.url}
+              target="_blank"
+              variant="outline"
+              size="sm"
+              leadingIcon={<ExternalLink className="size-4" aria-hidden />}
+            >
+              Open
+            </ButtonLink>
+            <ButtonLink
+              href={asset.url}
+              target="_blank"
+              variant="outline"
+              size="sm"
+              leadingIcon={<Download className="size-4" aria-hidden />}
+            >
+              Full size
+            </ButtonLink>
+          </div>
+        </div>
+      </div>
+    </Dialog>
   );
 }
 

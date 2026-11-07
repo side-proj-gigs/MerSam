@@ -36,10 +36,10 @@ turnaround and its own statically generated page. All editable in the dashboard.
 
 Everything below was run, not assumed.
 
-### Unit tests: 97 passing
+### Unit tests: 98 passing
 
 ```
-tests/unit/architecture.test.ts    5 tests
+tests/unit/architecture.test.ts    6 tests
 tests/unit/storage.test.ts        12 tests
 tests/unit/money.test.ts           8 tests
 tests/unit/invoice.test.ts        16 tests
@@ -66,7 +66,7 @@ Two assert against the company's real paperwork:
 - The Shola work report totals **GHC 2,800.00**, fully paid, zero outstanding, matching the signed
   report.
 
-### End-to-end tests: 70 passing
+### End-to-end tests: 72 passing
 
 Run against a production build on a desktop viewport and a Pixel 7.
 
@@ -90,7 +90,9 @@ unauthenticated send being rejected.
 Media adds: a file picked in the browser reaching the database and its exact bytes coming back
 out through the route the site links to, a file past the limit refused with its size and the
 limit rather than a shrug, an oversized photograph shrunk in the browser instead of refused, and
-the readiness probe naming the store uploads are going to.
+the readiness probe naming the store uploads are going to, a tile opening a viewer that shows the
+file at its real size with its dimensions, and deleting asking inside the application rather than
+in a browser dialog, with Cancel and Escape both leaving the file alone.
 
 ### Documents
 
@@ -188,6 +190,20 @@ These were real, and are listed because they are the useful part of a build reco
 20. **Signature rules on the proposal PDF sat at different heights.** The two cells are only the
     same height when both carry a job title. Each is now a fixed-height box, so the rules line up
     whether or not a role is set.
+23. **Uploaded media could not actually be looked at.** The library cropped everything to a
+    square thumbnail and offered no way to see the file itself, which makes choosing between two
+    similar photographs guesswork. A tile now opens a viewer: the whole file uncropped, its
+    dimensions, size, folder and address, arrow keys through the page, and a PDF rendered inline.
+24. **The browser's own confirmation dialog was still being used in five places.** It cannot be
+    styled, it names the action "OK", and it has nowhere to say what is about to happen. Replaced
+    by a branded dialog that names the action, states the consequence and shows the subject, with
+    the keyboard on Cancel so a reflex Enter destroys nothing. An architecture test now fails the
+    build if `confirm`, `alert` or `prompt` reappears.
+25. **The tile overlay swallowed its own buttons.** The copy and delete controls carried `z-20`
+    but sat inside a container whose opacity transition makes a stacking context, so the index
+    was trapped inside it and the full-tile button underneath took every click. Found by driving
+    the real page, not by reading it.
+
 ### Found in production, reported by the owner
 
 22. **Media upload was broken on the deployed site, and nothing said why.** Three faults in one
