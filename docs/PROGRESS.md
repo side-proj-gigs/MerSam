@@ -13,7 +13,7 @@ verified.
 | Enquiry capture | Public quote form through to a lead in the dashboard, with rate limiting, honeypot and duplicate handling |
 | Office dashboard | Enquiries, clients, jobs, proposals, invoices, work reports, services, content, media, settings, team |
 | Proposals | A priced letter to a potential client, drafted from an enquiry, grouped scope sections, optional extras outside the total, PDF and Word export, emailable, decision recorded |
-| Outbound email | Resend, optional throughout: enquiry confirmation, office alert, invoice, work report and proposal, every attempt logged |
+| Outbound email | Resend or Gmail, optional throughout: enquiry confirmation, office alert, invoice, work report and proposal, every attempt logged |
 | Invoicing | Line items, discounts, VAT, payments, status lifecycle, PDF and Word export |
 | Work reports | The numbered completion and payment report, buildable from an invoice, PDF and Word export |
 | Digital staff cards | Public card page, branded QR in three themes, lock-screen wallpaper, vCard download |
@@ -36,11 +36,13 @@ turnaround and its own statically generated page. All editable in the dashboard.
 
 Everything below was run, not assumed.
 
-### Unit tests: 98 passing
+### Unit tests: 114 passing
 
 ```
 tests/unit/architecture.test.ts    6 tests
 tests/unit/storage.test.ts        12 tests
+tests/unit/gmail.test.ts           9 tests
+tests/unit/image-url.test.ts       7 tests
 tests/unit/money.test.ts           8 tests
 tests/unit/invoice.test.ts        16 tests
 tests/unit/proposal.test.ts       15 tests
@@ -86,6 +88,10 @@ rather than twice under a repeated idempotency key, with the enquirer's own word
 the scope; the send dialog stating up front whether email can go out; the status endpoint never
 returning the provider key; the email settings tab refusing an unsendable test address; and an
 unauthenticated send being rejected.
+
+Email adds a second provider: Gmail over OAuth 2.0, with nine tests on the MIME encoder, because
+Gmail accepts one opaque blob and reports a malformed message by delivering it wrong rather than
+by failing.
 
 Media adds: a file picked in the browser reaching the database and its exact bytes coming back
 out through the route the site links to, a file past the limit refused with its size and the
@@ -203,6 +209,18 @@ These were real, and are listed because they are the useful part of a build reco
     but sat inside a container whose opacity transition makes a stacking context, so the index
     was trapped inside it and the full-tile button underneath took every click. Found by driving
     the real page, not by reading it.
+
+26. **An image uploaded to the library could not be used on the site.** Pasting its address
+    into a service's hero image field showed nothing. `next/image` answers 400 for an absolute
+    URL whose host is not in `remotePatterns`, a site does not list itself, and the media
+    viewer's copy button handed over exactly that absolute form. Addresses are now reduced to a
+    relative path when saved, the copy button gives the form that works, this deployment's own
+    hosts are allowed as a safety net for what was already stored, and image fields gained a
+    Library button so there is nothing to copy at all. One stored row was repaired by
+    `npm run fix:image-urls`.
+27. **Thumbnails were served as full-size originals.** The media grid passed `unoptimized` for
+    uploads, a workaround from when the object store was in play. Now that relative paths reach
+    the optimiser, a grid of 3MB photographs loads as 128px thumbnails instead.
 
 ### Found in production, reported by the owner
 

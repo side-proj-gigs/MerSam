@@ -25,7 +25,7 @@ import {
   uuidGenerator,
 } from './services';
 import { createEmailNotifier } from './email/notifier';
-import { createResendSender } from './email/resend';
+import { chooseEmailSender } from './email/sender';
 import { documentRenderer } from './documents/renderer';
 
 export interface Container {
@@ -57,7 +57,7 @@ function build(): Container {
     idempotency: pgIdempotency,
     rateLimiter: pgRateLimiter,
     notifier: createEmailNotifier(),
-    emailSender: createResendSender(),
+    emailSender: chooseEmailSender(),
     documents: documentRenderer,
   };
 }

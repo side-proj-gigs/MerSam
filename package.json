@@ -21,7 +21,9 @@
     "verify:copy": "tsx scripts/check-dashes.ts",
     "qa:reset-limits": "tsx scripts/clear-rate-limits.ts",
     "qa:reset": "tsx scripts/clear-test-data.ts",
-    "verify:email": "tsx scripts/verify-email.ts"
+    "verify:email": "tsx scripts/verify-email.ts",
+    "fix:image-urls": "tsx scripts/fix-image-urls.ts",
+    "gmail:authorise": "tsx scripts/gmail-authorise.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",

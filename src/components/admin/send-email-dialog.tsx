@@ -17,6 +17,7 @@ export interface EmailStatus {
   configured: boolean;
   reason: string | null;
   from: string | null;
+  provider: 'resend' | 'gmail';
   confirmationsEnabled: boolean;
   bcc: string | null;
 }

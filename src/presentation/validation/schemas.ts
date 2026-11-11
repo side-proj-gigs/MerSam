@@ -5,6 +5,7 @@ import {
   JOB_STATUSES,
   LEAD_SOURCES,
   LEAD_STATUSES,
+  normaliseMediaUrl,
   PAYMENT_METHODS,
   ROLES,
   URGENCY_LEVELS,
@@ -16,6 +17,14 @@ import {
 export const uuidSchema = z.string().uuid('That identifier is not valid');
 
 const trimmed = (max: number) => z.string().trim().max(max);
+
+/**
+ * Any field holding a picture. A link copied out of the media library is
+ * reduced to its relative path on the way in, because `next/image` will not
+ * optimise an absolute URL pointing back at this same site and the picture
+ * silently fails to appear.
+ */
+const imageUrl = (max = 1000) => trimmed(max).transform(normaliseMediaUrl);
 const requiredText = (max: number, label: string) =>
   z.string().trim().min(1, `${label} is required`).max(max, `${label} is too long`);
 
@@ -122,8 +131,8 @@ export const serviceSchema = z.object({
   summary: trimmed(1200).default(''),
   body: trimmed(20000).default(''),
   iconKey: trimmed(48).default('droplet'),
-  heroImageUrl: trimmed(1000).default(''),
-  galleryUrls: z.array(z.string().trim().max(1000)).max(24).default([]),
+  heroImageUrl: imageUrl().default(''),
+  galleryUrls: z.array(imageUrl()).max(24).default([]),
   features: z.array(serviceFeatureSchema).max(16).default([]),
   deliverables: z.array(z.string().trim().max(300)).max(24).default([]),
   startingPriceMinor: moneyMinorSchema.nullish(),
@@ -170,8 +179,8 @@ export const projectSchema = z.object({
   summary: trimmed(1200).default(''),
   body: trimmed(20000).default(''),
   serviceId: uuidSchema.nullish(),
-  coverImageUrl: trimmed(1000).default(''),
-  galleryUrls: z.array(z.string().trim().max(1000)).max(24).default([]),
+  coverImageUrl: imageUrl().default(''),
+  galleryUrls: z.array(imageUrl()).max(24).default([]),
   completedOn: dateSchema.nullish(),
   status: z.enum(['completed', 'ongoing']).default('completed'),
   stats: z
@@ -246,7 +255,7 @@ export const settingsSchema = z
           eyebrow: trimmed(120).default(''),
           headline: requiredText(200, 'Headline'),
           subhead: trimmed(500).default(''),
-          imageUrl: trimmed(1000).default(''),
+          imageUrl: imageUrl().default(''),
           ctaLabel: trimmed(60).default('Request a quote'),
           ctaHref: trimmed(300).default('/contact'),
         }),
@@ -277,7 +286,7 @@ export const settingsSchema = z
     seoTitle: trimmed(200).default(''),
     seoDescription: trimmed(600).default(''),
     seoKeywords: z.array(z.string().trim().max(60)).max(30).default([]),
-    ogImageUrl: trimmed(1000).nullish(),
+    ogImageUrl: imageUrl().nullish(),
 
     emailEnabled: z.boolean().default(false),
     emailFromName: trimmed(160).nullish(),

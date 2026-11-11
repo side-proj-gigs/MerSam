@@ -57,12 +57,33 @@ export const env = {
    * the database, so a dump cannot leak the ability to send as the company.
    */
   email: {
+    /** 'resend', 'gmail', or 'auto' to take whichever is configured. */
+    provider: optional('EMAIL_PROVIDER', 'auto') as 'auto' | 'resend' | 'gmail',
     apiKey: optional('RESEND_API_KEY'),
     from: optional('EMAIL_FROM'),
     fromName: optional('EMAIL_FROM_NAME'),
     replyTo: optional('EMAIL_REPLY_TO'),
     get configured() {
       return Boolean(this.apiKey && this.from);
+    },
+  },
+
+  /**
+   * Sending through a Gmail account.
+   *
+   * Not an API key: Gmail will not send on the strength of one. These are
+   * OAuth 2.0 credentials, and the refresh token is what lets a server hold
+   * authorisation without a person present. `npm run gmail:authorise` mints
+   * it. All of it travels over HTTPS, so none of it depends on SMTP.
+   */
+  gmail: {
+    clientId: optional('GMAIL_CLIENT_ID'),
+    clientSecret: optional('GMAIL_CLIENT_SECRET'),
+    refreshToken: optional('GMAIL_REFRESH_TOKEN'),
+    /** The address that granted consent. Gmail sends as this, whatever we ask. */
+    sender: optional('GMAIL_SENDER'),
+    get configured() {
+      return Boolean(this.clientId && this.clientSecret && this.refreshToken && this.sender);
     },
   },
 

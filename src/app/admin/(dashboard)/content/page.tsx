@@ -12,6 +12,7 @@ import { Checkbox, Input, Textarea } from '@/components/ui/field';
 import { Badge, Dialog } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/admin/shell';
+import { ImageField } from '@/components/admin/image-field';
 import { DataTable, type Column } from '@/components/admin/data-table';
 
 type Tab = 'testimonials' | 'projects' | 'faqs';
@@ -496,11 +497,11 @@ function ProjectDialog({ item, onClose }: { item?: ProjectShowcase; onClose: () 
         hint="One per line, as Label: Value"
       />
 
-      <Input
-        label="Cover image URL"
+      <ImageField
+        label="Cover image"
         wrapperClassName="mt-4"
         value={form.coverImageUrl}
-        onChange={(e) => set('coverImageUrl', e.target.value)}
+        onChange={(next) => set('coverImageUrl', next)}
       />
 
       <div className="mt-4 grid gap-4 sm:grid-cols-2">

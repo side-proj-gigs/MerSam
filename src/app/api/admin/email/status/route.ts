@@ -1,4 +1,5 @@
 import { contentDeps, emailDeps } from '@infra/deps';
+import { activeEmailProvider } from '@infra/email/sender';
 import { getEmailStatus } from '@app-layer/use-cases/email';
 import { getSiteSettings } from '@app-layer/use-cases/content';
 import { ok, route } from '@/presentation/http/respond';
@@ -17,6 +18,9 @@ export const GET = route(async () => {
 
   return ok({
     ...status,
+    // Which of the two providers is in play, so the settings page can say so
+    // rather than always naming Resend.
+    provider: activeEmailProvider(),
     confirmationsEnabled: settings.sendEnquiryConfirmation,
     bcc: settings.emailBcc,
   });

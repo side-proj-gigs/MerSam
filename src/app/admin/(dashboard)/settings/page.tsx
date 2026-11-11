@@ -12,6 +12,7 @@ import { Checkbox, Input, Textarea } from '@/components/ui/field';
 import { Badge, Card, CardHeader } from '@/components/ui/primitives';
 import { LoadingPanel } from '@/components/ui/water-loader';
 import { PageHeader } from '@/components/admin/shell';
+import { ImageField } from '@/components/admin/image-field';
 import { useEmailStatus } from '@/components/admin/send-email-dialog';
 
 type Tab = 'company' | 'contact' | 'hero' | 'documents' | 'email' | 'seo';
@@ -343,10 +344,10 @@ export default function SettingsPage() {
               onChange={(e) => setKeywords(e.target.value)}
               hint="One per line"
             />
-            <Input
-              label="Share image URL"
+            <ImageField
+              label="Share image"
               value={text('ogImageUrl')}
-              onChange={(e) => set('ogImageUrl', e.target.value)}
+              onChange={(next) => set('ogImageUrl', next)}
               hint="Shown when a link to the site is posted"
             />
           </div>
@@ -403,7 +404,11 @@ function EmailSettings({
       <Card>
         <CardHeader
           title="Provider"
-          description="Resend delivers the messages. Its API key is read from the environment, never stored here."
+          description={
+            provider?.provider === 'gmail'
+              ? 'A Gmail account delivers the messages, authorised once through Google. The credentials are read from the environment, never stored here.'
+              : 'Resend delivers the messages. Its API key is read from the environment, never stored here.'
+          }
           action={
             provider ? (
               <Badge tone={ready ? 'success' : 'warning'}>{ready ? 'Ready' : 'Not sending'}</Badge>
@@ -427,7 +432,9 @@ function EmailSettings({
             <div>
               <p className="font-semibold text-[var(--text-primary)]">
                 {ready
-                  ? `Messages go out from ${provider?.from}`
+                  ? `Messages go out from ${provider?.from} through ${
+                      provider?.provider === 'gmail' ? 'Gmail' : 'Resend'
+                    }`
                   : !provider?.enabled
                     ? 'Sending is switched off'
                     : 'No provider is configured'}
@@ -439,6 +446,11 @@ function EmailSettings({
                     ? 'Tick the box below and save. Everything else keeps working in the meantime, documents simply have to be downloaded and sent by hand.'
                     : (provider?.reason ??
                       'Set RESEND_API_KEY and EMAIL_FROM in the environment, then restart the app.')}
+              </p>
+              <p className="mt-1.5 text-xs text-[var(--text-muted)]">
+                {provider?.provider === 'gmail'
+                  ? 'Gmail sends from the mailbox that granted consent, whatever the address below says, and Google applies its own daily limit.'
+                  : 'The sending domain has to be verified with Resend before anything will deliver.'}
               </p>
             </div>
           </div>

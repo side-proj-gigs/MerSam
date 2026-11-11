@@ -97,3 +97,36 @@ export function probeImageSize(
   }
   return null;
 }
+
+/** Matches the route uploaded media is always served from. */
+const MEDIA_PATH = /^\/api\/media\/[0-9a-f-]{36}\/raw$/i;
+
+/**
+ * Turns a link to our own media library into the relative path.
+ *
+ * Someone copying an address out of the library gets a full URL, pastes it
+ * into a hero image field, and the picture never appears. The reason is not
+ * obvious: `next/image` refuses an absolute URL whose host is not listed in
+ * `remotePatterns`, and a site does not normally list itself. The same bytes
+ * at a relative path are optimised without complaint.
+ *
+ * Rather than ask people to know that, the absolute form is reduced to the
+ * relative one on the way in. It also survives the site moving to another
+ * domain, and a preview deployment, where a stored hostname would not.
+ *
+ * Anything else, an external CDN or an already relative path, is returned
+ * untouched.
+ */
+export function normaliseMediaUrl(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.startsWith('/')) return trimmed;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return trimmed;
+  }
+
+  return MEDIA_PATH.test(parsed.pathname) ? parsed.pathname : trimmed;
+}

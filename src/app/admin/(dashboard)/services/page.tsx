@@ -13,6 +13,7 @@ import { Select } from '@/components/ui/select';
 import { Badge, Dialog } from '@/components/ui/primitives';
 import { useConfirm } from '@/components/ui/confirm';
 import { PageHeader } from '@/components/admin/shell';
+import { ImageField } from '@/components/admin/image-field';
 import { DataTable, type Column } from '@/components/admin/data-table';
 
 const ICON_KEYS = [
@@ -321,12 +322,11 @@ function ServiceDialog({
         hint="One item per line"
       />
 
-      <Input
-        label="Hero image URL"
+      <ImageField
+        label="Hero image"
         wrapperClassName="mt-4"
         value={form.heroImageUrl}
-        onChange={(e) => set('heroImageUrl', e.target.value)}
-        hint="Paste a URL from the media library or an external CDN"
+        onChange={(next) => set('heroImageUrl', next)}
       />
 
       <div className="mt-4 grid gap-4 sm:grid-cols-3">

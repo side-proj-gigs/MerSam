@@ -32,7 +32,9 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 | `NEXT_PUBLIC_SITE_URL` | yes in production | Absolute site address. **Staff card QR codes encode this**, so a wrong value produces codes that point at the wrong host |
 | `STORAGE_DRIVER` | no | `local` (the default) keeps uploads in Postgres, `s3` uses an object store. An unreachable bucket falls back to Postgres rather than failing uploads |
 | `S3_*` | if `STORAGE_DRIVER=s3` | Endpoint, bucket, region and credentials |
-| `RESEND_API_KEY` | no | Enables outbound email. Left blank, the dashboard says so plainly and every document is still downloadable |
+| `EMAIL_PROVIDER` | no | `auto` (default), `resend` or `gmail` |
+| `RESEND_API_KEY` | no | Enables outbound email through Resend. Left blank, the dashboard says so plainly and every document is still downloadable |
+| `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN` / `GMAIL_SENDER` | no | Enables outbound email through a Gmail account. OAuth credentials, not an API key: run `npm run gmail:authorise` to mint the refresh token |
 | `EMAIL_FROM` | if sending | Sender address. Must be on a domain verified with Resend |
 | `EMAIL_FROM_NAME` / `EMAIL_REPLY_TO` | no | Display name and reply address |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` / `ADMIN_NAME` | no | Owner account created by the seed |
@@ -49,6 +51,8 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 | `npm test` | Unit tests (Vitest) |
 | `npm run test:e2e` | End-to-end tests (Playwright) against a production build |
 | `npm run verify:email` | Renders every outbound message to `.local/email-preview` and checks it, sending nothing |
+| `npm run gmail:authorise` | One-time Google consent that prints a Gmail refresh token |
+| `npm run fix:image-urls` | Rewrites stored links to our own media into relative paths |
 | `npm run qa:reset` | Removes the records the test suite creates, keeping the seeded examples |
 | `npm run db:generate` | Generate a migration from schema changes |
 | `npm run db:migrate` | Apply pending migrations |
@@ -77,7 +81,15 @@ Service and project pages are statically generated and revalidated every five mi
 - **Team**: accounts, roles and each person's digital business card
 
 ### Outbound email
-Resend carries the messages, and it is treated as optional throughout. With no API key the
+Either **Resend** or a **Gmail account** carries the messages, and it is treated as optional
+throughout. Both talk HTTPS, so neither depends on SMTP, which a serverless host does not allow
+out. Resend sends from your own domain and is the better choice for invoices; Gmail needs no
+domain verification but everything arrives from that mailbox under Google's own daily limits.
+
+Gmail is **not** configured with an API key. Google documents an API key as being for public
+data, and a mailbox is not that, so `messages.send` wants an OAuth 2.0 access token. Run
+`npm run gmail:authorise` once, approve the request in a browser, and it prints the refresh token
+to put in the environment. With no API key the
 dashboard says which piece is missing, every document stays downloadable, and nothing fails.
 With a key configured, five messages go out:
 
@@ -144,7 +156,7 @@ Full detail, including the non-obvious decisions and the bugs found while testin
 ## Testing
 
 ```bash
-npm test          # 98 unit tests
+npm test          # 114 unit tests
 npm run test:e2e  # 72 end-to-end tests, desktop and phone
 ```
 
@@ -183,6 +195,10 @@ does not scan is worse than no code at all.
   hole they were in: accepted by the form, refused by the platform, explained by nobody.
 - `GET /api/health` reports which store uploads are actually going to, and says why if the
   configured one is unreachable. Check it first when an upload misbehaves in production.
+- **An image address pasted into a content field is reduced to a relative path when it is
+  saved.** `next/image` answers 400 for an absolute URL whose host is not in `remotePatterns`,
+  and a site does not list itself, so a full link copied out of the media library showed nothing
+  at all. Admin image fields now have a "Library" button that writes the right value directly.
 - Neon suspends idle compute, which closes pooled connections. The pool handles that: it logs the
   dropped client and retries connection-level failures, so a suspend is invisible rather than an
   error. `npx tsx scripts/verify-db-recovery.ts` demonstrates it against your own database.

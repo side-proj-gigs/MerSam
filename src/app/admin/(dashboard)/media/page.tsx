@@ -257,10 +257,17 @@ export default function MediaPage() {
   }
 
   async function copyUrl(asset: MediaAsset) {
-    await navigator.clipboard.writeText(
-      asset.source === 'external' ? asset.url : `${window.location.origin}${asset.url}`,
-    );
-    toast.success('Address copied');
+    // The relative path, not the full URL. This is what gets pasted into a
+    // hero image field, and `next/image` will not optimise an absolute URL
+    // pointing back at this same site. Copying the form that works beats
+    // copying the form that looks right.
+    await navigator.clipboard.writeText(asset.url);
+    toast.success('Address copied', {
+      description:
+        asset.source === 'upload'
+          ? 'Paste it into any image field on a service, project or the home page.'
+          : undefined,
+    });
   }
 
   return (
@@ -457,7 +464,6 @@ function AssetThumbnail({ asset }: { asset: MediaAsset }) {
         alt={asset.altText}
         fill
         sizes="(min-width: 1024px) 16vw, 44vw"
-        unoptimized={asset.source === 'upload'}
         className="object-cover"
       />
     );

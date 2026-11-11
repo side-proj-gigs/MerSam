@@ -226,6 +226,31 @@ cannot turn a successful submission into an error on a visitor's screen.
 
 ---
 
+### Two providers, neither of them SMTP
+
+Resend was the first adapter; Gmail is the second. The port did not change to accommodate it,
+which is the point of having one.
+
+Gmail is worth a note because the obvious way in does not exist. Google issues `AIza...` API
+keys, and it is natural to assume one of those sends mail. It does not: Google's own
+documentation describes an API key as the credential "used to request access to public data",
+and a mailbox is not public data. `users.messages.send` wants an OAuth 2.0 access token, which
+lasts an hour, which is no use to a server. So the adapter holds a refresh token, granted once by
+a person in a browser via `npm run gmail:authorise`, and exchanges it for access tokens as it
+goes, caching each until shortly before it expires.
+
+Neither adapter uses SMTP. Both are plain HTTPS to an API, which is what a serverless function is
+permitted to do and what the host's blocking of outbound SMTP ports does not touch.
+
+The MIME encoder lives apart from the transport, in `email/mime.ts`, with no credentials, no
+network and no configuration in it. That is partly tidiness and mostly testability: Gmail takes
+one opaque blob of RFC 5322 and does not reject a malformed one with a useful error. It arrives
+looking wrong, or arrives without the invoice attached. Nine tests cover the parts that fail
+quietly: the nested `multipart/mixed` around `multipart/alternative`, a cedi sign in a subject
+line, base64 folded to the line limit, and a filename that tries to open a header of its own.
+
+---
+
 ## 9. Proposals
 
 A proposal is a letter with a priced scope attached: narrative fields carry the letter, items
@@ -292,6 +317,23 @@ rather than described, because "PDF" says nothing about which PDF it is.
 A row can outlive its bytes, which is exactly what the dead bucket did to this installation, so
 an image that fails to load says so and suggests what to do rather than leaving an empty frame
 that looks like it is still thinking.
+
+### A site does not list itself
+
+An address copied out of the media library used to be a full URL, and pasting it into a hero
+image field showed nothing at all. The reason is not guessable from the symptom: `next/image`
+answers `400 "url" parameter is not allowed` for an absolute URL whose host is not in
+`remotePatterns`, and no site lists its own hostname there. The identical bytes at a relative
+path optimise without complaint.
+
+Rather than document that and hope, the address is reduced to a relative path when it is saved,
+by a transform on every image field in the validation layer. That also survives a change of
+domain and a preview deployment, where a stored hostname would not. `remotePatterns` additionally
+carries this deployment's own hosts, pinned to `/api/media/**`, so whatever was saved before the
+transform existed still works.
+
+The better fix is upstream of all of it: image fields in the admin now have a Library button that
+writes the stored path directly, so there is no address to copy and no form to get wrong.
 
 ### The limit belongs to the platform, not to taste
 
