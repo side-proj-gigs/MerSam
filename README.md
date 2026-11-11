@@ -87,9 +87,20 @@ out. Resend sends from your own domain and is the better choice for invoices; Gm
 domain verification but everything arrives from that mailbox under Google's own daily limits.
 
 Gmail is **not** configured with an API key. Google documents an API key as being for public
-data, and a mailbox is not that, so `messages.send` wants an OAuth 2.0 access token. Run
-`npm run gmail:authorise` once, approve the request in a browser, and it prints the refresh token
-to put in the environment. With no API key the
+data, and a mailbox is not that, so `messages.send` wants an OAuth 2.0 access token. Setting it
+up once:
+
+1. In the Google Cloud console, enable the Gmail API, configure the OAuth consent screen, and
+   create an OAuth client of type **Web application**.
+2. Add `http://localhost:5410/callback` to its authorised redirect URIs. Consent happens on your
+   own machine, so a production URL cannot receive the code.
+3. Put the downloaded client secret JSON in `files/` (gitignored) and run
+   `npm run gmail:authorise`. It reads the file, opens the consent screen, and prints every value
+   to set, locally and in Vercel.
+
+The refresh token can send mail as that account until it is revoked at
+[myaccount.google.com/permissions](https://myaccount.google.com/permissions). Treat it as a
+password. With no API key the
 dashboard says which piece is missing, every document stays downloadable, and nothing fails.
 With a key configured, five messages go out:
 
