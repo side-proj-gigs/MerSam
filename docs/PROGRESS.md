@@ -9,7 +9,7 @@ verified.
 
 | Area | State |
 |---|---|
-| Public marketing site | Home, services index, 13 service detail pages, projects index and detail, about, FAQ, contact |
+| Public marketing site | Home, services index, 13 service detail pages, projects index and detail, about, FAQ, contact, privacy policy, terms of service |
 | Enquiry capture | Public quote form through to a lead in the dashboard, with rate limiting, honeypot and duplicate handling |
 | Office dashboard | Enquiries, clients, jobs, proposals, invoices, work reports, services, content, media, settings, team |
 | Proposals | A priced letter to a potential client, drafted from an enquiry, grouped scope sections, optional extras outside the total, PDF and Word export, emailable, decision recorded |
@@ -68,7 +68,7 @@ Two assert against the company's real paperwork:
 - The Shola work report totals **GHC 2,800.00**, fully paid, zero outstanding, matching the signed
   report.
 
-### End-to-end tests: 72 passing
+### End-to-end tests: 73 passing
 
 Run against a production build on a desktop viewport and a Pixel 7.
 

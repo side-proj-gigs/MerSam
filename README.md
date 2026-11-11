@@ -64,7 +64,8 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 
 ### Public site
 Home, services index and 13 service detail pages, projects index and detail, about, FAQ and
-contact. Everything on these pages comes from the database and is editable in the dashboard.
+contact, plus a privacy policy and terms of service. Everything on these pages comes from the
+database and is editable in the dashboard.
 Service and project pages are statically generated and revalidated every five minutes.
 
 ### Office dashboard (`/admin`)
@@ -100,7 +101,22 @@ up once:
 
 The refresh token can send mail as that account until it is revoked at
 [myaccount.google.com/permissions](https://myaccount.google.com/permissions). Treat it as a
-password. With no API key the
+password.
+
+**Before Gmail works in production**, the OAuth consent screen has to leave Testing status, and
+Google's review has two hard prerequisites:
+
+- **A domain you actually own.** Google verifies the *top private domain* of your home page. For
+  `anything.vercel.app` that is `vercel.app`, which belongs to Vercel, so it can never be
+  verified. Point your own domain at the deployment, verify it in Google Search Console using an
+  account that is an Owner or Editor on the Cloud project, and list it under Authorised domains.
+- **A privacy policy on that same domain, linked from the home page.** `/privacy` is that page.
+  It discloses the Gmail scope, what is and is not done with Google user data, and the Limited
+  Use commitment, which is what the reviewer checks for.
+
+Left in Testing status no review is needed, but authorisations expire after seven days and mail
+stops until you re-authorise. `gmail.send` is a *sensitive* scope rather than a restricted one,
+so verification does not require a third-party security assessment. With no API key the
 dashboard says which piece is missing, every document stays downloadable, and nothing fails.
 With a key configured, five messages go out:
 
@@ -168,7 +184,7 @@ Full detail, including the non-obvious decisions and the bugs found while testin
 
 ```bash
 npm test          # 114 unit tests
-npm run test:e2e  # 72 end-to-end tests, desktop and phone
+npm run test:e2e  # 73 end-to-end tests, desktop and phone
 ```
 
 The unit tests cover the money arithmetic, invoice, proposal and report totals, status

@@ -73,6 +73,32 @@ test.describe('public website', () => {
     expect(response?.status()).toBe(404);
   });
 
+  test('the legal pages exist and are reachable from the home page', async ({ page }) => {
+    // Google reviews these by hand when verifying the Gmail integration, and
+    // requires the privacy policy to be linked from the home page and hosted
+    // on the same domain. A 404 here fails that review.
+    await page.goto('/');
+
+    const privacy = page.getByRole('link', { name: 'Privacy policy' });
+    await expect(privacy).toBeVisible();
+    await privacy.click();
+    await expect(page).toHaveURL(/\/privacy$/);
+
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/Privacy policy/i);
+    // The disclosure Google specifically looks for.
+    await expect(page.getByRole('heading', { name: /how Google user data is used/i })).toBeVisible();
+    await expect(page.getByText(/Limited Use/i)).toBeVisible();
+    await expect(page.getByText(/no ability to read, search, delete or modify/i)).toBeVisible();
+
+    await page.goto('/terms');
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/Terms of service/i);
+    // Each links to the other, so a reviewer landing on either finds both.
+    // Scoped to the article: the footer carries its own link on every page.
+    await expect(
+      page.getByRole('article').getByRole('link', { name: 'privacy policy' }),
+    ).toBeVisible();
+  });
+
   test('the health endpoint reports a reachable database', async ({ request }) => {
     const response = await request.get('/api/health');
     expect(response.ok()).toBe(true);

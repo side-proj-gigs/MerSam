@@ -173,10 +173,22 @@ export function SiteFooter({
           <p>
             {year} {settings.legalName || settings.companyName}. All rights reserved.
           </p>
-          <p>
-            Registered in {settings.country}
-            {settings.region ? `, ${settings.region}` : ''}
-          </p>
+
+          {/* Reachable from every page including the home page, which is
+              where anybody looking for them expects to find them, and where
+              Google looks when it verifies the application. */}
+          <nav aria-label="Legal" className="flex items-center gap-4">
+            <Link href="/privacy" className="transition-colors hover:text-gold-400">
+              Privacy policy
+            </Link>
+            <Link href="/terms" className="transition-colors hover:text-gold-400">
+              Terms of service
+            </Link>
+            <span className="hidden sm:inline">
+              Registered in {settings.country}
+              {settings.region ? `, ${settings.region}` : ''}
+            </span>
+          </nav>
         </div>
       </div>
     </footer>
