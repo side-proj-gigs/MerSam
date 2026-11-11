@@ -386,6 +386,19 @@ Escape and the backdrop both mean cancel. The local is called `askConfirm` rathe
 precisely so it does not shadow the global that is no longer allowed. An architecture test fails
 the build if `confirm`, `alert` or `prompt` is called anywhere under `src` again.
 
+**Photographs are chosen, not collected.** The first set came from a stock library and was wrong
+in a way nobody notices until a customer does: laboratory coats for water treatment, an eye
+behind safety goggles for geophysical surveys, a photovoltaic farm for solar water heating. The
+replacements were found by searching Wikimedia Commons through its API, because the stock sites
+block automated access and guessing identifiers returned a pizza and a QR code, and then every
+candidate was rendered into a contact sheet and looked at before being chosen. Several show
+African tradesmen at work, which matters for a Ghanaian contractor.
+
+They are downloaded into the media library rather than hot linked: the site serves its own
+copies, they pass through the image optimiser, and nothing breaks if another service goes down.
+`src/lib/image-credits.ts` is the single list behind both the install script and the `/credits`
+page, so a photograph cannot be swapped without its attribution following it.
+
 **The splash screen cannot trap anyone.** It is `pointer-events: none`, shows once per session,
 respects reduced motion, and leaves after a hard ceiling regardless of whether a third-party image
 has finished loading.

@@ -23,7 +23,9 @@
     "qa:reset": "tsx scripts/clear-test-data.ts",
     "verify:email": "tsx scripts/verify-email.ts",
     "fix:image-urls": "tsx scripts/fix-image-urls.ts",
-    "gmail:authorise": "tsx scripts/gmail-authorise.ts"
+    "gmail:authorise": "tsx scripts/gmail-authorise.ts",
+    "images:services": "tsx scripts/install-service-images.ts",
+    "images:align": "tsx scripts/align-site-images.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",

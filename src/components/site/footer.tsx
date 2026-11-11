@@ -184,6 +184,9 @@ export function SiteFooter({
             <Link href="/terms" className="transition-colors hover:text-gold-400">
               Terms of service
             </Link>
+            <Link href="/credits" className="transition-colors hover:text-gold-400">
+              Credits
+            </Link>
             <span className="hidden sm:inline">
               Registered in {settings.country}
               {settings.region ? `, ${settings.region}` : ''}

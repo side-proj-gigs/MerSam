@@ -53,6 +53,8 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 | `npm run verify:email` | Renders every outbound message to `.local/email-preview` and checks it, sending nothing |
 | `npm run gmail:authorise` | One-time Google consent that prints a Gmail refresh token |
 | `npm run fix:image-urls` | Rewrites stored links to our own media into relative paths |
+| `npm run images:services` | Downloads a real photograph for every service into the media library |
+| `npm run images:align` | Points the home page slides and project covers at the same photographs |
 | `npm run qa:reset` | Removes the records the test suite creates, keeping the seeded examples |
 | `npm run db:generate` | Generate a migration from schema changes |
 | `npm run db:migrate` | Apply pending migrations |
@@ -64,8 +66,15 @@ Sign in to the dashboard at `/admin/login` with the `ADMIN_EMAIL` and `ADMIN_PAS
 
 ### Public site
 Home, services index and 13 service detail pages, projects index and detail, about, FAQ and
-contact, plus a privacy policy and terms of service. Everything on these pages comes from the
-database and is editable in the dashboard.
+contact, plus a privacy policy, terms of service and photograph credits. Everything on these
+pages comes from the database and is editable in the dashboard.
+
+Every service is illustrated with a photograph of the actual trade: drilling crews, pipelayers,
+plumbers at work, a survey team in the field. The seeded set came from a stock library and showed
+chemists in lab coats, which is not what this company does. The replacements are downloaded into
+the media library rather than hot linked, so they are served from this site and optimised like
+any other upload. Several are Creative Commons and are credited at `/credits`, which
+`src/lib/image-credits.ts` drives.
 Service and project pages are statically generated and revalidated every five minutes.
 
 ### Office dashboard (`/admin`)

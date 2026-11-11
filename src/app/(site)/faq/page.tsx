@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import { contentDeps } from '@infra/deps';
-import { getSiteSettings, listPublishedFaqs } from '@app-layer/use-cases/content';
+import {
+  getSiteSettings,
+  listActiveServices,
+  listPublishedFaqs,
+} from '@app-layer/use-cases/content';
+import { serviceHero } from '@/lib/media';
 import { Reveal } from '@/components/ui/motion';
 import { EmptyState } from '@/components/ui/primitives';
 import { PageBanner } from '@/components/site/page-banner';
@@ -16,7 +21,11 @@ export const metadata: Metadata = {
 
 export default async function FaqPage() {
   const deps = contentDeps();
-  const [settings, faqs] = await Promise.all([getSiteSettings(deps), listPublishedFaqs(deps)]);
+  const [settings, faqs, services] = await Promise.all([
+    getSiteSettings(deps),
+    listPublishedFaqs(deps),
+    listActiveServices(deps),
+  ]);
 
   // The FAQPage schema lets these answers appear directly in search results.
   const jsonLd = {
@@ -42,7 +51,8 @@ export default async function FaqPage() {
         eyebrow="Questions"
         title="The things people ask before they commit"
         description="Straight answers on cost, timing, water quality and what happens if something goes wrong afterwards."
-        imageKey="labBench"
+        imageUrl={serviceHero(services, 'pressure-testing-of-pipes') ?? undefined}
+        imageKey="pipeGauges"
         breadcrumbs={[{ href: '/faq', label: 'FAQ' }]}
       />
 

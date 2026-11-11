@@ -75,3 +75,19 @@ export function img(key: PhotoKey, options?: ImageOptions): string {
 /** A 1x1 translucent pixel, used as the blur placeholder under hero images. */
 export const BLUR_DATA_URL =
   'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA4IDUiPjxyZWN0IHdpZHRoPSI4IiBoZWlnaHQ9IjUiIGZpbGw9IiMxMDE0MWIiLz48L3N2Zz4=';
+
+/**
+ * The hero photograph of a named service, for pages that want to show real
+ * work rather than a stock photograph.
+ *
+ * The seeded library leaned on laboratory imagery, which is not what a
+ * water engineering and plumbing contractor does. Reading these from the
+ * services means the pictures follow whatever the office sets in the admin,
+ * and there is one place to change them.
+ */
+export function serviceHero(
+  services: { slug: string; heroImageUrl: string }[],
+  slug: string,
+): string | null {
+  return services.find((service) => service.slug === slug)?.heroImageUrl || null;
+}

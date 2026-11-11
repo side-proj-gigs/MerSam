@@ -45,6 +45,7 @@ export default async function ServicesPage({
             ? active.description
             : 'Thirteen services covering the whole line, from finding water underground to the tap it finally comes out of. One team, one point of accountability.'
         }
+        imageUrl={visible[0]?.heroImageUrl || undefined}
         imageKey="pipeGauges"
       />
 

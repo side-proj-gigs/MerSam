@@ -7,7 +7,7 @@ import {
   listActiveServices,
   listPublishedTestimonials,
 } from '@app-layer/use-cases/content';
-import { img, BLUR_DATA_URL } from '@/lib/media';
+import { img, BLUR_DATA_URL, serviceHero } from '@/lib/media';
 import { paragraphs } from '@/lib/utils';
 import { CountUpValue, Parallax, Reveal } from '@/components/ui/motion';
 import { PageBanner } from '@/components/site/page-banner';
@@ -85,8 +85,8 @@ export default async function AboutPage() {
               <Parallax strength={0.08} className="absolute -bottom-10 -right-5 hidden w-52 sm:block">
                 <div className="overflow-hidden rounded-2xl border-4 border-[var(--surface)] shadow-[var(--shadow-float)]">
                   <Image
-                    src={img('labSamples', { width: 600 })}
-                    alt="Water samples being tested"
+                    src={serviceHero(services, 'general-plumbing') ?? img('technicianAtWork', { width: 600 })}
+                    alt="MerSam plumbers at work on a fit out"
                     width={600}
                     height={420}
                     className="h-auto w-full object-cover"

@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { ArrowRight, BadgeCheck, Clock3, MapPin, ShieldCheck, Sparkles } from 'lucide-react';
 import { contentDeps } from '@infra/deps';
 import { getHomepageBundle } from '@app-layer/use-cases/content';
-import { img, BLUR_DATA_URL } from '@/lib/media';
+import { img, BLUR_DATA_URL, serviceHero } from '@/lib/media';
 import { paragraphs } from '@/lib/utils';
 import { ButtonLink } from '@/components/ui/button';
 import { Marquee, Parallax, Reveal, TiltCard } from '@/components/ui/motion';
@@ -121,8 +121,8 @@ export default async function HomePage() {
               <Parallax strength={0.1} className="absolute -bottom-8 -right-4 hidden w-56 sm:block">
                 <div className="overflow-hidden rounded-2xl border-4 border-[var(--surface-sunken)] shadow-[var(--shadow-float)]">
                   <Image
-                    src={img('labTesting', { width: 600 })}
-                    alt="Water quality testing in the laboratory"
+                    src={serviceHero(services, 'water-treatment') ?? img('pipeGauges', { width: 600 })}
+                    alt="A MerSam technician working on a treatment plant"
                     width={600}
                     height={420}
                     className="h-auto w-full object-cover"

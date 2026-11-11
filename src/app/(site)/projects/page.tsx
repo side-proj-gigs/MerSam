@@ -27,6 +27,7 @@ export default async function ProjectsPage() {
         eyebrow="Our work"
         title="Jobs we are happy to be measured on"
         description="Every project here lists what was delivered and the figures it achieved. No vague claims, no stock photography of someone else's work."
+        imageUrl={projects[0]?.coverImageUrl || undefined}
         imageKey="siteAerial"
         breadcrumbs={[{ href: '/projects', label: 'Projects' }]}
       />
