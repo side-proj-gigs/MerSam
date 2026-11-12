@@ -28,6 +28,43 @@ const imageUrl = (max = 1000) => trimmed(max).transform(normaliseMediaUrl);
 const requiredText = (max: number, label: string) =>
   z.string().trim().min(1, `${label} is required`).max(max, `${label} is too long`);
 
+/**
+ * Validates a partial update, keeping only the fields the caller actually
+ * sent.
+ *
+ * `schema.partial().parse(body)` is the obvious way to do this and it destroys
+ * data. Marking a field optional does not switch off its default, so a request
+ * carrying one field comes back with every other field filled in with its
+ * default, and the repository writes those over the stored values. Sending
+ * `{ tagline }` to the settings is enough to empty the hero slides, the
+ * statistics, the offices, the opening hours and the address, reset the VAT
+ * rate to zero and turn outbound email off. The same applies to every PATCH in
+ * the admin: the services, clients, jobs, invoices, proposals and reports.
+ *
+ * The defaults are still worth having, because a field that is sent but blank
+ * should normalise, and nested objects inside an array need theirs filled in.
+ * So the whole body is validated and then narrowed to the keys it arrived
+ * with, which keeps the trimming and the URL rewriting while leaving anything
+ * unmentioned alone.
+ */
+export function parsePatch<Shape extends z.ZodRawShape>(
+  schema: z.ZodObject<Shape>,
+  body: unknown,
+): Partial<z.infer<z.ZodObject<Shape>>> {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    // Let the schema produce the message, so the error reads like every other
+    // validation failure rather than something invented here.
+    schema.partial().parse(body);
+  }
+
+  const sent = new Set(Object.keys(body as Record<string, unknown>));
+  const parsed = schema.partial().parse(body) as Record<string, unknown>;
+
+  return Object.fromEntries(
+    Object.entries(parsed).filter(([key]) => sent.has(key)),
+  ) as Partial<z.infer<z.ZodObject<Shape>>>;
+}
+
 /** Accepts "1,100.50", "1100.5" or a number and yields integer minor units. */
 export const moneyMinorSchema = z
   .union([z.number(), z.string()])

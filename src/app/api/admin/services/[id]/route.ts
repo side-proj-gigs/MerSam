@@ -1,9 +1,10 @@
 import { NotFoundError } from '@core/errors';
 import { contentDeps, repositories } from '@infra/deps';
 import { deleteService, updateService } from '@app-layer/use-cases/content';
+import { revalidatePublicSite } from '@/presentation/http/revalidate';
 import { noContent, ok, route } from '@/presentation/http/respond';
 import { requirePrincipal } from '@/presentation/http/session';
-import { serviceSchema, uuidSchema } from '@/presentation/validation/schemas';
+import { parsePatch, serviceSchema, uuidSchema } from '@/presentation/validation/schemas';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,13 +22,18 @@ export const GET = route(async (_request: Request, context: Context) => {
 export const PATCH = route(async (request: Request, context: Context) => {
   const actor = await requirePrincipal('admin');
   const id = uuidSchema.parse((await context.params).id);
-  const input = serviceSchema.partial().parse(await request.json());
-  return ok(await updateService(contentDeps(), actor, id, input as never));
+  const input = parsePatch(serviceSchema, await request.json());
+  const service = await updateService(contentDeps(), actor, id, input as never);
+  // Without this a changed hero image keeps showing the previous photograph,
+  // because the services and service detail pages are prerendered.
+  revalidatePublicSite();
+  return ok(service);
 });
 
 export const DELETE = route(async (_request: Request, context: Context) => {
   const actor = await requirePrincipal('admin');
   const id = uuidSchema.parse((await context.params).id);
   await deleteService(contentDeps(), actor, id);
+  revalidatePublicSite();
   return noContent();
 });

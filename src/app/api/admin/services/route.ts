@@ -1,5 +1,6 @@
 import { contentDeps, repositories } from '@infra/deps';
 import { createService } from '@app-layer/use-cases/content';
+import { revalidatePublicSite } from '@/presentation/http/revalidate';
 import { created, ok, route } from '@/presentation/http/respond';
 import { withIdempotency } from '@/presentation/http/idempotency';
 import { requirePrincipal } from '@/presentation/http/session';
@@ -24,8 +25,10 @@ export const GET = route(async (request: Request) => {
 export const POST = route(async (request: Request) => {
   const actor = await requirePrincipal('admin');
   const input = serviceSchema.parse(await request.json());
-  return withIdempotency(request, 'service.create', async () => ({
-    status: 201,
-    body: await createService(contentDeps(), actor, input as never),
-  }));
+  return withIdempotency(request, 'service.create', async () => {
+    const service = await createService(contentDeps(), actor, input as never);
+    // The new service belongs on the services page now, not in five minutes.
+    revalidatePublicSite();
+    return { status: 201, body: service };
+  });
 });

@@ -2,7 +2,7 @@ import { NotFoundError } from '@core/errors';
 import { repositories } from '@infra/deps';
 import { noContent, ok, route } from '@/presentation/http/respond';
 import { requirePrincipal } from '@/presentation/http/session';
-import { clientSchema, uuidSchema } from '@/presentation/validation/schemas';
+import { clientSchema, parsePatch, uuidSchema } from '@/presentation/validation/schemas';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -29,7 +29,7 @@ export const GET = route(async (_request: Request, context: Context) => {
 export const PATCH = route(async (request: Request, context: Context) => {
   const actor = await requirePrincipal('staff');
   const id = uuidSchema.parse((await context.params).id);
-  const input = clientSchema.partial().parse(await request.json());
+  const input = parsePatch(clientSchema, await request.json());
 
   const repos = repositories();
   const client = await repos.clients.update(id, { ...input, email: input.email || null });

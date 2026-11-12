@@ -50,7 +50,15 @@ export default defineConfig({
     : {
         command: `npx next start -p ${PORT}`,
         url: `${BASE_URL}/api/health`,
-        reuseExistingServer: !process.env.CI,
+        /**
+         * Never reuse a server that happens to be listening already. Reusing
+         * one is a false pass waiting to happen: a run once reported a green
+         * suite against a build from the previous day, including the two tests
+         * written that hour to prove a fix, which the server predated. Paying
+         * a few seconds to start a known server is worth more than a result
+         * that cannot be trusted. Point E2E_BASE_URL at a server to opt out.
+         */
+        reuseExistingServer: false,
         timeout: 120_000,
         stdout: 'ignore',
         stderr: 'pipe',

@@ -3,7 +3,7 @@ import { invoiceDeps, repositories } from '@infra/deps';
 import { deleteInvoice, updateInvoice } from '@app-layer/use-cases/invoices';
 import { noContent, ok, route } from '@/presentation/http/respond';
 import { requirePrincipal } from '@/presentation/http/session';
-import { invoiceUpdateSchema, uuidSchema } from '@/presentation/validation/schemas';
+import { invoiceUpdateSchema, parsePatch, uuidSchema } from '@/presentation/validation/schemas';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -25,7 +25,7 @@ export const GET = route(async (_request: Request, context: Context) => {
 export const PATCH = route(async (request: Request, context: Context) => {
   const actor = await requirePrincipal('staff');
   const id = uuidSchema.parse((await context.params).id);
-  const input = invoiceUpdateSchema.parse(await request.json());
+  const input = parsePatch(invoiceUpdateSchema, await request.json());
   return ok(await updateInvoice(invoiceDeps(), actor, id, input as never));
 });
 

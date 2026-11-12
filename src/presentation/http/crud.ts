@@ -6,15 +6,19 @@ import type { ListQuery } from '@app-layer/ports';
 import { invalidateContentCache } from '@infra/services';
 import { repositories } from '@infra/deps';
 import { withIdempotency } from './idempotency';
+import { revalidatePublicSite } from './revalidate';
 import { ok, noContent, route } from './respond';
 import { requirePrincipal } from './session';
-import { parseListQuery, uuidSchema } from '../validation/schemas';
+import { parseListQuery, parsePatch, uuidSchema } from '../validation/schemas';
 
 /**
  * The content collections (testimonials, projects, FAQs, categories) all behave
  * identically: list with paging, create, patch, delete, with an audit entry and
  * a cache flush on every write. Rather than repeat that five times, each
  * collection declares its repository and its schema and gets the handlers back.
+ *
+ * Two caches are flushed on a write, and both are needed: the read through
+ * cache in front of the queries, and the prerendered public pages.
  */
 export interface CollectionConfig<TEntity, TSchema extends z.ZodTypeAny> {
   /** Used for audit entries, cache keys and idempotency scoping. */
@@ -68,6 +72,7 @@ export function collectionRoutes<TEntity, TSchema extends z.ZodTypeAny>(
       );
 
       await invalidateContentCache(cachePrefix);
+      revalidatePublicSite();
       await repos.audit.record({
         actorId: actor.userId,
         action: 'create',
@@ -107,7 +112,7 @@ export function itemRoutes<TEntity, TSchema extends z.ZodTypeAny>(
     const id = uuidSchema.parse((await context.params).id);
     const body = await request.json();
     // Partial so a form can send only what changed.
-    const input = (config.schema as unknown as z.ZodObject<z.ZodRawShape>).partial().parse(body);
+    const input = parsePatch(config.schema as unknown as z.ZodObject<z.ZodRawShape>, body);
 
     const repos = repositories();
     const existing = await config.repo(repos).findById(id);
@@ -119,6 +124,7 @@ export function itemRoutes<TEntity, TSchema extends z.ZodTypeAny>(
     );
 
     await invalidateContentCache(cachePrefix);
+    revalidatePublicSite();
     await repos.audit.record({
       actorId: actor.userId,
       action: 'update',
@@ -142,6 +148,7 @@ export function itemRoutes<TEntity, TSchema extends z.ZodTypeAny>(
 
     await config.repo(repos).delete(id);
     await invalidateContentCache(cachePrefix);
+    revalidatePublicSite();
     await repos.audit.record({
       actorId: actor.userId,
       action: 'delete',

@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { cache as reactCache } from 'react';
 import bcrypt from 'bcryptjs';
 import { and, eq, lt, sql } from 'drizzle-orm';
 import { jwtVerify, SignJWT } from 'jose';
@@ -72,80 +73,77 @@ export const joseTokens: TokenService = {
 
 /* ---------------------------------------------------------------- cache */
 
-interface CacheEntry {
-  value: unknown;
-  expiresAt: number;
-}
+/**
+ * The read through cache in front of the public content queries, scoped to one
+ * request.
+ *
+ * This was one map per process with a five minute expiry, which looked like a
+ * free win and was half of a real bug. A write only ever flushed the instance
+ * that served it, so any other serverless instance went on answering from its
+ * own copy. Worse, because the public pages are prerendered, whatever a
+ * regeneration happened to read was then frozen into the page cache for
+ * another window, so an edit could stay invisible for longer than either
+ * expiry suggested, with nothing in the browser to clear.
+ *
+ * Scoping it to the request keeps the part that was earning its keep: one
+ * render of the home page asks for the settings and the services several times
+ * over, and those still collapse into a single query each. What it gives up is
+ * reuse between requests, which the prerendered pages already provide, and
+ * which can be flushed on demand where this could not.
+ *
+ * React's cache() supplies the scope. Per the Next documentation it is "scoped
+ * to the current request only. Each request gets its own memoization scope
+ * with no sharing between requests."
+ */
+const requestStore = reactCache((): Map<string, unknown> => new Map());
 
 /**
- * An in-process cache with a hard entry cap. It sits in front of the read-heavy
- * public queries (services, settings, testimonials) so a burst of visitors
- * hits Postgres once rather than once per request. Each serverless instance
- * keeps its own copy, which is fine for content that changes a few times a day
- * and is invalidated explicitly whenever the admin saves.
+ * Outside a request there is no scope to attach to, which is the case in the
+ * maintenance scripts and in tests. A throwaway map is the honest answer: every
+ * read then goes to the database, which is what a script wants anyway.
  */
-class MemoryCache implements Cache {
-  private readonly store = new Map<string, CacheEntry>();
-  private readonly maxEntries = 500;
-
-  async get<T>(key: string): Promise<T | null> {
-    const entry = this.store.get(key);
-    if (!entry) return null;
-    if (entry.expiresAt < Date.now()) {
-      this.store.delete(key);
-      return null;
-    }
-    // Refresh recency so the eviction below drops genuinely cold keys.
-    this.store.delete(key);
-    this.store.set(key, entry);
-    return entry.value as T;
-  }
-
-  async set<T>(key: string, value: T, ttlSeconds: number): Promise<void> {
-    if (this.store.size >= this.maxEntries) {
-      const oldest = this.store.keys().next();
-      if (!oldest.done) this.store.delete(oldest.value);
-    }
-    this.store.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
-  }
-
-  async delete(key: string): Promise<void> {
-    this.store.delete(key);
-  }
-
-  async deleteByPrefix(prefix: string): Promise<void> {
-    for (const key of this.store.keys()) {
-      if (key.startsWith(prefix)) this.store.delete(key);
-    }
+function store(): Map<string, unknown> {
+  try {
+    return requestStore();
+  } catch {
+    return new Map();
   }
 }
 
-const globalForCache = globalThis as unknown as { __mersamCache?: Cache };
-export const memoryCache: Cache = globalForCache.__mersamCache ?? new MemoryCache();
-if (env.nodeEnv !== 'production') globalForCache.__mersamCache = memoryCache;
+export const requestCache: Cache = {
+  async get<T>(key: string): Promise<T | null> {
+    const hit = store().get(key);
+    // undefined is the miss. A stored null is a value the loader returned.
+    return hit === undefined ? null : (hit as T);
+  },
 
-export const CACHE_KEYS = {
-  settings: 'settings:site',
-  servicesActive: 'services:active',
-  serviceBySlug: (slug: string) => `services:slug:${slug}`,
-  testimonials: 'testimonials:published',
-  projects: 'projects:published',
-  faqs: 'faqs:published',
-} as const;
+  /** The expiry is ignored deliberately: an entry cannot outlive its request. */
+  async set<T>(key: string, value: T): Promise<void> {
+    store().set(key, value);
+  },
 
-/** Called whenever the admin writes content, so the next read rebuilds. */
+  async delete(key: string): Promise<void> {
+    store().delete(key);
+  },
+
+  async deleteByPrefix(prefix: string): Promise<void> {
+    const map = store();
+    for (const key of [...map.keys()]) {
+      if (key.startsWith(prefix)) map.delete(key);
+    }
+  },
+};
+
+/**
+ * Drops the cached reads for the rest of this request, so anything the handler
+ * does after a write sees the new row rather than the one it loaded earlier.
+ *
+ * This says nothing about the prerendered pages. Those are expired separately
+ * by revalidatePublicSite in the presentation layer, which is what makes an
+ * edit visible to the public site.
+ */
 export async function invalidateContentCache(prefix?: string): Promise<void> {
-  if (prefix) {
-    await memoryCache.deleteByPrefix(prefix);
-    return;
-  }
-  await Promise.all([
-    memoryCache.deleteByPrefix('settings:'),
-    memoryCache.deleteByPrefix('services:'),
-    memoryCache.deleteByPrefix('testimonials:'),
-    memoryCache.deleteByPrefix('projects:'),
-    memoryCache.deleteByPrefix('faqs:'),
-  ]);
+  await requestCache.deleteByPrefix(prefix ?? '');
 }
 
 /* ---------------------------------------------------------- idempotency */

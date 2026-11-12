@@ -18,9 +18,9 @@ import { createRepositories, createUnitOfWork } from './repositories';
 import {
   bcryptHasher,
   joseTokens,
-  memoryCache,
   pgIdempotency,
   pgRateLimiter,
+  requestCache,
   systemClock,
   uuidGenerator,
 } from './services';
@@ -53,7 +53,7 @@ function build(): Container {
     ids: uuidGenerator,
     hasher: bcryptHasher,
     tokens: joseTokens,
-    cache: memoryCache,
+    cache: requestCache,
     idempotency: pgIdempotency,
     rateLimiter: pgRateLimiter,
     notifier: createEmailNotifier(),
